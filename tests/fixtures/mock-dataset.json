@@ -1,0 +1,112 @@
+{
+  "documents": [
+    {
+      "_id": "post-1",
+      "_type": "post",
+      "_rev": "rev-1",
+      "_createdAt": "2024-01-01T00:00:00Z",
+      "_updatedAt": "2024-01-01T12:00:00Z",
+      "title": "Test Post 1",
+      "slug": {
+        "current": "test-post-1"
+      },
+      "content": "This is a test post content",
+      "author": {
+        "_ref": "author-1",
+        "_type": "reference"
+      },
+      "publishedAt": "2024-01-01T10:00:00Z",
+      "categories": [
+        {
+          "_key": "cat-1",
+          "_ref": "category-1",
+          "_type": "reference"
+        }
+      ]
+    },
+    {
+      "_id": "post-2",
+      "_type": "post",
+      "_rev": "rev-2",
+      "_createdAt": "2024-01-02T00:00:00Z",
+      "_updatedAt": "2024-01-02T12:00:00Z",
+      "title": "Test Post 2",
+      "slug": {
+        "current": "test-post-2"
+      },
+      "content": "Another test post",
+      "author": {
+        "_ref": "author-1",
+        "_type": "reference"
+      },
+      "publishedAt": "2024-01-02T10:00:00Z"
+    },
+    {
+      "_id": "author-1",
+      "_type": "author",
+      "_rev": "rev-3",
+      "_createdAt": "2023-12-01T00:00:00Z",
+      "_updatedAt": "2023-12-01T00:00:00Z",
+      "name": "John Doe",
+      "email": "john@example.com",
+      "bio": "Test author bio"
+    },
+    {
+      "_id": "category-1",
+      "_type": "category",
+      "_rev": "rev-4",
+      "_createdAt": "2023-11-01T00:00:00Z",
+      "_updatedAt": "2023-11-01T00:00:00Z",
+      "title": "Technology",
+      "slug": {
+        "current": "technology"
+      }
+    },
+    {
+      "_id": "draft.post-3",
+      "_type": "post",
+      "_rev": "rev-5",
+      "_createdAt": "2024-01-03T00:00:00Z",
+      "_updatedAt": "2024-01-03T12:00:00Z",
+      "title": "Draft Post",
+      "slug": {
+        "current": "draft-post"
+      },
+      "content": "This is a draft post",
+      "author": {
+        "_ref": "author-1",
+        "_type": "reference"
+      }
+    }
+  ],
+  "assets": [
+    {
+      "_id": "image-1",
+      "_type": "sanity.imageAsset",
+      "url": "https://cdn.sanity.io/images/test-project/test-dataset/image1.jpg",
+      "path": "images/test-project/test-dataset/image1.jpg",
+      "size": 102400,
+      "mimeType": "image/jpeg",
+      "metadata": {
+        "dimensions": {
+          "width": 1920,
+          "height": 1080
+        }
+      }
+    },
+    {
+      "_id": "image-2",
+      "_type": "sanity.imageAsset",
+      "url": "https://cdn.sanity.io/images/test-project/test-dataset/image2.png",
+      "path": "images/test-project/test-dataset/image2.png",
+      "size": 51200,
+      "mimeType": "image/png",
+      "metadata": {
+        "dimensions": {
+          "width": 800,
+          "height": 600
+        }
+      }
+    }
+  ]
+}

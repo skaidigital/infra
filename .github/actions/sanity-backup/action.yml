@@ -1,0 +1,88 @@
+name: 'Sanity Backup Action'
+description: 'Composite action for backing up Sanity datasets to R2'
+inputs:
+  sanity-token:
+    description: 'Sanity authentication token'
+    required: true
+  project-id:
+    description: 'Sanity project ID'
+    required: true
+  dataset:
+    description: 'Dataset to backup'
+    required: true
+  r2-account-id:
+    description: 'R2 account ID'
+    required: true
+  r2-access-key-id:
+    description: 'R2 access key ID'
+    required: true
+  r2-secret-access-key:
+    description: 'R2 secret access key'
+    required: true
+  r2-bucket:
+    description: 'R2 bucket name'
+    required: true
+  r2-prefix:
+    description: 'R2 path prefix'
+    required: false
+    default: 'sanity'
+  include-drafts:
+    description: 'Include draft documents'
+    required: false
+    default: 'true'
+  include-assets:
+    description: 'Include binary assets'
+    required: false
+    default: 'true'
+  asset-concurrency:
+    description: 'Concurrent asset downloads'
+    required: false
+    default: '6'
+  retain-count:
+    description: 'Days to retain backups'
+    required: false
+    default: '7'
+  slack-webhook-url:
+    description: 'Slack webhook URL for notifications'
+    required: false
+    default: ''
+
+outputs:
+  object-key:
+    description: 'S3 object key of the backup'
+    value: ${{ steps.run-backup.outputs.object-key }}
+  object-size:
+    description: 'Size of the backup in bytes'
+    value: ${{ steps.run-backup.outputs.object-size }}
+  backup-timestamp:
+    description: 'Timestamp of the backup'
+    value: ${{ steps.run-backup.outputs.backup-timestamp }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Setup environment
+      shell: bash
+      run: |
+        echo "Setting up environment variables"
+        echo "SANITY_TOKEN=${{ inputs.sanity-token }}" >> $GITHUB_ENV
+        echo "SANITY_PROJECT_ID=${{ inputs.project-id }}" >> $GITHUB_ENV
+        echo "SANITY_DATASET=${{ inputs.dataset }}" >> $GITHUB_ENV
+        echo "R2_ACCOUNT_ID=${{ inputs.r2-account-id }}" >> $GITHUB_ENV
+        echo "R2_ACCESS_KEY_ID=${{ inputs.r2-access-key-id }}" >> $GITHUB_ENV
+        echo "R2_SECRET_ACCESS_KEY=${{ inputs.r2-secret-access-key }}" >> $GITHUB_ENV
+        echo "R2_BUCKET=${{ inputs.r2-bucket }}" >> $GITHUB_ENV
+        echo "R2_REGION=auto" >> $GITHUB_ENV
+        echo "R2_PREFIX=${{ inputs.r2-prefix }}" >> $GITHUB_ENV
+        echo "SLACK_WEBHOOK_URL=${{ inputs.slack-webhook-url }}" >> $GITHUB_ENV
+        echo "RETAIN_COUNT=${{ inputs.retain-count }}" >> $GITHUB_ENV
+        echo "INCLUDE_DRAFTS=${{ inputs.include-drafts }}" >> $GITHUB_ENV
+        echo "INCLUDE_ASSETS=${{ inputs.include-assets }}" >> $GITHUB_ENV
+        echo "ASSET_CONCURRENCY=${{ inputs.asset-concurrency }}" >> $GITHUB_ENV
+
+    - name: Run backup
+      id: run-backup
+      shell: bash
+      run: |
+        echo "Starting backup process"
+        bun run src/backup/index.ts

@@ -1,0 +1,31 @@
+# Example workflow file for repositories that want to use the Sanity R2 backup workflow
+# Copy this file to your repository's .github/workflows/ directory and customize it
+
+name: Daily Sanity Backup
+
+on:
+  schedule:
+    # Run daily at 3 AM UTC
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+    # Allow manual trigger from GitHub UI
+
+jobs:
+  backup:
+    name: Backup Sanity Dataset
+    uses: skaidigital/infra/.github/workflows/sanity-r2-backup.yml@v1
+    with:
+      projectId: 'your-project-id'
+      dataset: 'production'
+      includeDrafts: true
+      includeAssets: true
+      assetConcurrency: 6
+      retainCount: 7
+      r2Prefix: 'sanity'
+      slackWebhookUrl: ${{ vars.SLACK_WEBHOOK_URL }}  # Optional: set in repository variables
+    secrets:
+      SANITY_TOKEN: ${{ secrets.SANITY_TOKEN }}
+      R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      R2_BUCKET: ${{ secrets.R2_BUCKET }}

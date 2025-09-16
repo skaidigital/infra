@@ -1,0 +1,178 @@
+name: Sanity to R2 Backup
+
+on:
+  workflow_call:
+    inputs:
+      projectId:
+        description: 'Sanity project identifier'
+        required: true
+        type: string
+      dataset:
+        description: 'Dataset name to backup'
+        required: true
+        type: string
+      includeDrafts:
+        description: 'Include draft documents'
+        required: false
+        type: boolean
+        default: true
+      includeAssets:
+        description: 'Include binary assets'
+        required: false
+        type: boolean
+        default: true
+      assetConcurrency:
+        description: 'Concurrent asset download limit'
+        required: false
+        type: number
+        default: 6
+      retainCount:
+        description: 'Days of backups to retain'
+        required: false
+        type: number
+        default: 7
+      r2Prefix:
+        description: 'Storage path prefix'
+        required: false
+        type: string
+        default: 'sanity'
+      slackWebhookUrl:
+        description: 'Webhook for notifications'
+        required: false
+        type: string
+        default: ''
+    secrets:
+      SANITY_TOKEN:
+        description: 'Sanity authentication token'
+        required: true
+      R2_ACCOUNT_ID:
+        description: 'Cloudflare R2 account ID'
+        required: true
+      R2_ACCESS_KEY_ID:
+        description: 'Cloudflare R2 access key'
+        required: true
+      R2_SECRET_ACCESS_KEY:
+        description: 'Cloudflare R2 secret key'
+        required: true
+      R2_BUCKET:
+        description: 'Cloudflare R2 bucket name'
+        required: true
+    outputs:
+      objectKey:
+        description: 'Final R2 storage path'
+        value: ${{ jobs.backup.outputs.objectKey }}
+      objectSize:
+        description: 'Archive size in bytes'
+        value: ${{ jobs.backup.outputs.objectSize }}
+      backupTimestamp:
+        description: 'UTC timestamp used'
+        value: ${{ jobs.backup.outputs.backupTimestamp }}
+
+jobs:
+  backup:
+    name: Backup Sanity to R2
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    outputs:
+      objectKey: ${{ steps.backup.outputs.objectKey }}
+      objectSize: ${{ steps.backup.outputs.objectSize }}
+      backupTimestamp: ${{ steps.backup.outputs.backupTimestamp }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository }}
+          ref: 'main'
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Validate inputs
+        run: |
+          if [ -z "${{ inputs.projectId }}" ]; then
+            echo "::error::Project ID is required"
+            exit 1
+          fi
+          if [ -z "${{ inputs.dataset }}" ]; then
+            echo "::error::Dataset is required"
+            exit 1
+          fi
+
+      - name: Validate secrets
+        run: |
+          if [ -z "${{ secrets.SANITY_TOKEN }}" ]; then
+            echo "::error::SANITY_TOKEN secret is not set"
+            exit 1
+          fi
+          if [ -z "${{ secrets.R2_ACCOUNT_ID }}" ]; then
+            echo "::error::R2_ACCOUNT_ID secret is not set"
+            exit 1
+          fi
+          if [ -z "${{ secrets.R2_ACCESS_KEY_ID }}" ]; then
+            echo "::error::R2_ACCESS_KEY_ID secret is not set"
+            exit 1
+          fi
+          if [ -z "${{ secrets.R2_SECRET_ACCESS_KEY }}" ]; then
+            echo "::error::R2_SECRET_ACCESS_KEY secret is not set"
+            exit 1
+          fi
+          if [ -z "${{ secrets.R2_BUCKET }}" ]; then
+            echo "::error::R2_BUCKET secret is not set"
+            exit 1
+          fi
+
+      - name: Run backup
+        id: backup
+        env:
+          SANITY_TOKEN: ${{ secrets.SANITY_TOKEN }}
+          SANITY_PROJECT_ID: ${{ inputs.projectId }}
+          SANITY_DATASET: ${{ inputs.dataset }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          R2_REGION: auto
+          R2_PREFIX: ${{ inputs.r2Prefix }}
+          SLACK_WEBHOOK_URL: ${{ inputs.slackWebhookUrl }}
+          RETAIN_COUNT: ${{ inputs.retainCount }}
+          INCLUDE_DRAFTS: ${{ inputs.includeDrafts }}
+          INCLUDE_ASSETS: ${{ inputs.includeAssets }}
+          ASSET_CONCURRENCY: ${{ inputs.assetConcurrency }}
+        run: |
+          set -e
+          echo "Starting backup for project: ${{ inputs.projectId }}, dataset: ${{ inputs.dataset }}"
+
+          # Run the backup script
+          OUTPUT=$(bun run src/backup/index.ts 2>&1) || {
+            echo "::error::Backup failed with exit code $?"
+            echo "$OUTPUT"
+            exit 1
+          }
+
+          # Parse output for workflow outputs
+          OBJECT_KEY=$(echo "$OUTPUT" | grep -oP 'objectKey:\s*\K.*' || echo "")
+          OBJECT_SIZE=$(echo "$OUTPUT" | grep -oP 'objectSize:\s*\K.*' || echo "")
+          BACKUP_TIMESTAMP=$(echo "$OUTPUT" | grep -oP 'backupTimestamp:\s*\K.*' || echo "")
+
+          # Set outputs
+          echo "objectKey=$OBJECT_KEY" >> $GITHUB_OUTPUT
+          echo "objectSize=$OBJECT_SIZE" >> $GITHUB_OUTPUT
+          echo "backupTimestamp=$BACKUP_TIMESTAMP" >> $GITHUB_OUTPUT
+
+          echo "Backup completed successfully"
+
+      - name: Upload logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backup-logs-${{ github.run_id }}
+          path: |
+            *.log
+            tmp/
+          retention-days: 7

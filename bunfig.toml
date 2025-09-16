@@ -1,0 +1,13 @@
+[install]
+peer = false
+auto = "fallback"
+
+[install.lockfile]
+save = true
+
+[test]
+coverage = false
+coverageThreshold = 0.8
+
+[run]
+silent = false
