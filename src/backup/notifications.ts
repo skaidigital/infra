@@ -43,9 +43,16 @@ export async function sendNotification(options: NotificationOptions): Promise<vo
   const webhookUrl = process.env.SLACK_WEBHOOK_URL;
 
   if (!webhookUrl) {
-    logger.info('No webhook URL configured, skipping notification');
+    logger.warn('SLACK_WEBHOOK_URL not configured - notifications disabled');
     return;
   }
+
+  logger.info('Sending notification', {
+    status,
+    projectId,
+    dataset,
+    webhookConfigured: !!webhookUrl
+  });
 
   try {
     const message = buildSlackMessage(options);
@@ -66,7 +73,7 @@ export async function sendNotification(options: NotificationOptions): Promise<vo
     logger.info('Notification sent successfully', { status, projectId, dataset });
   } catch (error) {
     // Don't throw error for notification failures - we don't want to fail the entire backup
-    logger.error('Failed to send notification', error as Error);
+    logger.error('Failed to send Slack notification', error as Error);
   }
 }
 

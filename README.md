@@ -1,5 +1,7 @@
 # Sanity to Cloudflare R2 Backup Workflow
 
+[![Version](https://img.shields.io/badge/version-v1-blue)](https://github.com/skaidigital/infra/releases)
+
 Automated backup solution for Sanity datasets to Cloudflare R2 storage with retention management, notifications, and GitHub Actions integration.
 
 ## Features
@@ -69,7 +71,7 @@ on:
 
 jobs:
   backup:
-    uses: your-org/infra/.github/workflows/sanity-r2-backup.yml@main
+    uses: skaidigital/infra/.github/workflows/sanity-r2-backup.yml@v1  # Use tagged version
     with:
       # CONFIGURATION VALUES (not secrets - hardcode these)
       projectId: 'abc123xyz'     # Your Sanity project ID (find in sanity.io dashboard)
@@ -86,24 +88,20 @@ jobs:
       R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}      # From org secret
       R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }} # From org secret
       R2_BUCKET: ${{ secrets.R2_BUCKET }}                    # From org secret
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}    # Optional: From repo secret
 ```
 
 #### C. Optional: Slack Notifications
 
-Add as a **repository variable** (not secret):
+Add as a **repository secret** (for security):
 
-**Location**: Your Project Repo → Settings → Secrets and variables → Actions → Variables
+**Location**: Your Project Repo → Settings → Secrets and variables → Actions → Secrets
 
-| Variable Name | Value | Required |
-|--------------|-------|----------|
+| Secret Name | Value | Required |
+|------------|-------|----------|
 | `SLACK_WEBHOOK_URL` | `https://hooks.slack.com/services/...` | ❌ Optional |
 
-Then update your workflow:
-
-```yaml
-with:
-  slackWebhookUrl: ${{ vars.SLACK_WEBHOOK_URL }}
-```
+**Note**: The SLACK_WEBHOOK_URL is passed as a secret in the workflow (see example above).
 
 ### Complete Configuration Reference
 
@@ -130,6 +128,7 @@ These are **not secrets** - put them directly in your workflow file:
 | `R2_SECRET_ACCESS_KEY` | GitHub Organization | Cloudflare R2 API Tokens | All backup repos |
 | `R2_BUCKET` | GitHub Organization | Your R2 bucket name | All backup repos |
 | `SANITY_TOKEN` | Each Project Repository | Sanity.io → API → Tokens | Per project |
+| `SLACK_WEBHOOK_URL` | Each Project Repository | Slack App → Incoming Webhooks | Per project (optional) |
 
 ### Finding Your Configuration Values
 
@@ -169,7 +168,6 @@ Check existing datasets: Sanity Studio → Datasets tab
 | `assetConcurrency` | Concurrent asset downloads | `6` | ❌ |
 | `retainCount` | Days of backups to keep | `7` | ❌ |
 | `r2Prefix` | Storage path prefix | `sanity` | ❌ |
-| `slackWebhookUrl` | Slack webhook for notifications | - | ❌ |
 
 ### Environment Variables
 
@@ -398,6 +396,47 @@ env:
 - ✅ R2 credentials use IAM with minimal permissions
 - ✅ Sanity tokens should be read-only
 - ✅ Slack webhooks optional and isolated
+
+## Versioning
+
+### Release Tags
+
+We use semantic versioning for this workflow:
+- **v1** - Latest stable v1.x.x release (recommended)
+- **v1.x.x** - Specific patch version
+- **main** - Latest development version (use with caution)
+
+### Updating Your Workflow
+
+When we release updates, you can update your workflow by changing the tag:
+
+```yaml
+# Stable version (recommended)
+uses: skaidigital/infra/.github/workflows/sanity-r2-backup.yml@v1
+
+# Specific version
+uses: skaidigital/infra/.github/workflows/sanity-r2-backup.yml@v1.0.1
+
+# Latest development (not recommended for production)
+uses: skaidigital/infra/.github/workflows/sanity-r2-backup.yml@main
+```
+
+### For Contributors
+
+When making changes to this workflow:
+
+1. Make your changes and test thoroughly
+2. Commit with a descriptive message
+3. Create a new release with an incremented version:
+   ```bash
+   git tag -a v1.0.1 -m "Fix: Slack notifications now use secrets"
+   git push origin v1.0.1
+   ```
+4. Update the major version tag to point to the latest:
+   ```bash
+   git tag -fa v1 -m "Update v1 tag to v1.0.1"
+   git push origin v1 --force
+   ```
 
 ## License
 
