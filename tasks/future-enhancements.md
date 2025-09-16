@@ -1,7 +1,7 @@
 # Future Enhancements
 
 ## Axiom Logging Integration
-**Priority:** Medium
+**Priority:** Medium  
 **Estimated Effort:** 1-2 days
 
 ### Description
@@ -49,3 +49,14 @@ Integrate Axiom for centralized logging and monitoring of backup workflow runs.
 - Lifecycle policies for moving old backups to cold storage
 - Compression optimization based on content type
 - Deduplication for similar datasets
+
+---
+
+## Experimental: Try Bun S3 Client
+
+### 5. Bun S3 Client Integration
+- Add an option to use the Bun S3 client instead of the AWS SDK for R2 uploads
+- Implement a test mode or feature flag to toggle between AWS and Bun S3 clients
+- Compare upload speed, reliability, and compatibility with R2
+- Validate multi-part and single-part uploads with the Bun S3 client
+- Document any required configuration or environment changes for Bun S3 usage

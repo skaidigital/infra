@@ -1,5 +1,5 @@
 import { spawn } from 'child_process';
-import { promises as fs } from 'fs';
+import { promises as fs, existsSync } from 'fs';
 import { join } from 'path';
 import { logger } from '../utils/logger.ts';
 
@@ -53,9 +53,46 @@ export async function exportSanityDataset(options: ExportOptions): Promise<void>
   return new Promise((resolve, reject) => {
     logger.info('Running Sanity CLI export command...');
 
-    // Use bun to run @sanity/cli directly from node_modules
-    // __dirname gives us the directory of this file, we need to go up to find node_modules
-    const sanityCliPath = join(__dirname, '..', '..', 'node_modules', '@sanity', 'cli', 'bin', 'sanity.js');
+    // Try multiple possible locations for the Sanity CLI
+    const possiblePaths = [
+      // In GitHub Actions, the working directory is where the infra repo is checked out
+      join(process.cwd(), 'node_modules', '@sanity', 'cli', 'bin', 'sanity.js'),
+      // Try relative to this file's location
+      join(__dirname, '..', '..', 'node_modules', '@sanity', 'cli', 'bin', 'sanity.js'),
+    ];
+
+    // Try using require.resolve as a separate step
+    try {
+      possiblePaths.push(require.resolve('@sanity/cli/bin/sanity.js'));
+    } catch {
+      // Ignore if not found
+    }
+
+    let sanityCliPath: string | undefined;
+    for (const path of possiblePaths) {
+      // Check if file exists
+      if (existsSync(path)) {
+        sanityCliPath = path;
+        logger.info(`Found Sanity CLI at: ${path}`);
+        break;
+      }
+    }
+
+    if (!sanityCliPath) {
+      // Fallback to using npx which should work universally
+      logger.info('Could not find Sanity CLI directly, falling back to npx');
+      const sanityProcess = spawn('npx', ['@sanity/cli', ...args], {
+        env: {
+          ...process.env,
+          SANITY_AUTH_TOKEN: token,
+        },
+        stdio: ['inherit', 'pipe', 'pipe'],
+      });
+
+      setupProcessHandlers(sanityProcess, outputPath, token, resolve, reject, includeAssets);
+      return;
+    }
+
     const sanityProcess = spawn('bun', [sanityCliPath, ...args], {
       env: {
         ...process.env,
@@ -64,17 +101,29 @@ export async function exportSanityDataset(options: ExportOptions): Promise<void>
       stdio: ['inherit', 'pipe', 'pipe'],
     });
 
-    let stdout = '';
-    let stderr = '';
+    setupProcessHandlers(sanityProcess, outputPath, token, resolve, reject, includeAssets);
+  });
+}
 
-    // Handle spawn errors immediately
-    sanityProcess.on('error', (error: any) => {
+function setupProcessHandlers(
+  sanityProcess: any,
+  outputPath: string,
+  token: string,
+  resolve: (value: void | PromiseLike<void>) => void,
+  reject: (reason?: any) => void,
+  includeAssets: boolean = true
+): void {
+  let stdout = '';
+  let stderr = '';
+
+  // Handle spawn errors immediately
+  sanityProcess.on('error', (error: any) => {
       logger.error('Failed to spawn Sanity CLI', error);
       const errorMessage = error?.message || error?.code || String(error) || 'Unknown error';
       reject(new Error(`Failed to start Sanity export: ${errorMessage}`));
     });
 
-    sanityProcess.stdout?.on('data', (data) => {
+    sanityProcess.stdout?.on('data', (data: Buffer) => {
       const output = data.toString();
       stdout += output;
       // Log progress without exposing sensitive data
@@ -86,7 +135,7 @@ export async function exportSanityDataset(options: ExportOptions): Promise<void>
       });
     });
 
-    sanityProcess.stderr?.on('data', (data) => {
+    sanityProcess.stderr?.on('data', (data: Buffer) => {
       const output = data.toString();
       stderr += output;
       // Only log non-sensitive errors
@@ -95,7 +144,7 @@ export async function exportSanityDataset(options: ExportOptions): Promise<void>
       }
     });
 
-    sanityProcess.on('close', async (code) => {
+    sanityProcess.on('close', async (code: number | null) => {
       if (code === 0) {
         try {
           // Verify the export was successful
@@ -134,7 +183,6 @@ export async function exportSanityDataset(options: ExportOptions): Promise<void>
         reject(new Error(`Sanity export failed with code ${code}: ${errorMessage}`));
       }
     });
-  });
 }
 
 export async function validateSanityCredentials(
@@ -158,7 +206,7 @@ export async function validateSanityCredentials(
 
     let stdout = '';
 
-    sanityProcess.stdout?.on('data', (data) => {
+    sanityProcess.stdout?.on('data', (data: Buffer) => {
       stdout += data.toString();
     });
 

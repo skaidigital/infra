@@ -30,8 +30,13 @@ describe('Sanity Export', () => {
 
   test('exportSanityDataset builds correct command arguments with all options', async () => {
     const mockSpawn = mock((command: string, args: string[], options: any) => {
-      expect(command).toBe('bun');
-      expect(args[0]).toContain('sanity.js');
+      // Allow both bun and npx since we have fallback logic
+      expect(['bun', 'npx']).toContain(command);
+      if (command === 'bun') {
+        expect(args[0]).toContain('sanity.js');
+      } else {
+        expect(args[0]).toBe('@sanity/cli');
+      }
       expect(args).toContain('dataset');
       expect(args).toContain('export');
       expect(args).toContain('test-dataset');
