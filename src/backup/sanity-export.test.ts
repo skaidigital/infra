@@ -4,6 +4,14 @@ import { promises as fs } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 
+// Mock the @sanity/client module
+mock.module('@sanity/client', () => ({
+  createClient: mock(() => ({
+    projectId: 'test-project',
+    dataset: 'test-dataset',
+  })),
+}));
+
 // Mock the @sanity/export module
 mock.module('@sanity/export', () => ({
   default: mock(async (options: any) => {
@@ -91,6 +99,12 @@ describe('Sanity Export', () => {
     // Mock export that doesn't create files
     const mockExport = mock(async () => ({ documents: 0, assets: 0 }));
     mock.module('@sanity/export', () => ({ default: mockExport }));
+    mock.module('@sanity/client', () => ({
+      createClient: mock(() => ({
+        projectId: 'test-project',
+        dataset: 'test-dataset',
+      })),
+    }));
 
     await expect(exportSanityDataset({
       projectId: 'test-project',

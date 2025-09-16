@@ -1,4 +1,5 @@
 import exportDataset from '@sanity/export';
+import { createClient } from '@sanity/client';
 import { promises as fs } from 'fs';
 import { join } from 'path';
 import { logger } from '../utils/logger.ts';
@@ -29,11 +30,18 @@ export async function exportSanityDataset(options: ExportOptions): Promise<void>
   // Ensure output directory exists
   await fs.mkdir(outputPath, { recursive: true });
 
-  const exportOptions = {
+  // Create Sanity client
+  const client = createClient({
     projectId,
     dataset,
-    outputPath,
     token,
+    apiVersion: '2021-06-07',
+    useCdn: false,
+  });
+
+  const exportOptions = {
+    client,
+    outputPath,
     assets: includeAssets,
     raw: false, // Export as tarball
     drafts: includeDrafts,
@@ -53,9 +61,9 @@ export async function exportSanityDataset(options: ExportOptions): Promise<void>
   try {
     // Run the export
     logger.info('Calling exportDataset with options', {
-      projectId: exportOptions.projectId,
-      dataset: exportOptions.dataset,
-      hasToken: !!exportOptions.token,
+      projectId,
+      dataset,
+      hasClient: !!exportOptions.client,
       assets: exportOptions.assets,
       drafts: exportOptions.drafts,
     });

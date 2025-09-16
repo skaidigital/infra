@@ -1,9 +1,9 @@
 declare module '@sanity/export' {
+  import type { SanityClient } from '@sanity/client';
+
   export interface ExportOptions {
-    projectId: string;
-    dataset: string;
+    client: SanityClient;
     outputPath: string;
-    token?: string;
     assets?: boolean;
     raw?: boolean;
     drafts?: boolean;
