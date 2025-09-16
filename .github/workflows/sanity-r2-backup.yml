@@ -83,7 +83,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: 'skaidigital/infra'
-          ref: 'main'
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Debug checkout
