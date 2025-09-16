@@ -79,11 +79,11 @@ jobs:
       backupTimestamp: ${{ steps.backup.outputs.backupTimestamp }}
 
     steps:
-      - name: Checkout repository
+      - name: Checkout infrastructure repository
         uses: actions/checkout@v4
         with:
-          repository: ${{ github.repository }}
-          ref: 'main'
+          repository: 'skaidigital/infra'
+          ref: 'v1'
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
