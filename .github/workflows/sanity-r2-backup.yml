@@ -84,6 +84,21 @@ jobs:
         with:
           repository: 'skaidigital/infra'
           ref: 'main'
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Debug checkout
+        run: |
+          echo "Current directory: $(pwd)"
+          echo "Directory contents:"
+          ls -la
+          echo "Checking for src directory:"
+          ls -la src/ || echo "No src directory found"
+          echo "Checking for backup directory:"
+          ls -la src/backup/ || echo "No src/backup directory found"
+          echo "Git status:"
+          git status
+          echo "Git log:"
+          git log --oneline -5
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -100,6 +115,8 @@ jobs:
           echo "Installing dependencies with Bun..."
           bun install --frozen-lockfile
           echo "Dependencies installed successfully"
+          echo "Verifying node_modules:"
+          ls -la node_modules/@sanity/ || echo "No @sanity modules found"
 
       - name: Validate inputs
         run: |
@@ -156,23 +173,31 @@ jobs:
           set -e
           echo "::notice::Starting backup for project: ${{ inputs.projectId }}, dataset: ${{ inputs.dataset }}"
 
-          # Check Node.js availability
+          # Check runtime availability
           echo "Node version: $(node --version)"
           echo "Bun version: $(bun --version)"
 
-          # List installed packages
-          echo "Checking @sanity/export installation..."
-          ls -la node_modules/@sanity/ || echo "No @sanity modules found"
+          # Verify script exists
+          if [ ! -f "src/backup/index.ts" ]; then
+            echo "::error::Backup script not found at src/backup/index.ts"
+            echo "Current directory: $(pwd)"
+            echo "Directory contents:"
+            ls -la
+            exit 1
+          fi
 
           # Run the backup script
-          echo "::notice::Running backup script..."
+          echo "::notice::Running backup script at src/backup/index.ts..."
           OUTPUT=$(bun run src/backup/index.ts 2>&1) || {
             EXIT_CODE=$?
             echo "::error::Backup failed with exit code $EXIT_CODE"
-            echo "Error output:"
+            echo "Output from backup script:"
             echo "$OUTPUT"
             exit $EXIT_CODE
           }
+
+          echo "Backup script output:"
+          echo "$OUTPUT"
 
           # Parse output for workflow outputs
           OBJECT_KEY=$(echo "$OUTPUT" | grep -oP 'objectKey:\s*\K.*' || echo "")
