@@ -50,7 +50,7 @@ export async function runBackup(): Promise<BackupResult> {
 
   const tempDir = join(tmpdir(), `sanity-backup-${timestamp}`);
   const exportDir = join(tempDir, 'export');
-  const archivePath = join(tempDir, `sanity-${config.projectId}-${config.dataset}-${timestamp}.tar.gz`);
+  const archivePath = join(tempDir, `${config.projectId}-${config.dataset}-${timestamp}.tar.gz`);
 
   try {
     // Create temporary directory
@@ -99,7 +99,7 @@ export async function runBackup(): Promise<BackupResult> {
     // Step 5: Upload to R2
     logger.info('Uploading to R2...', { size: `${fileSizeMB} MB` });
     // Direct structure: projectId/dataset/filename (no top-level prefix)
-    const objectKey = `${config.projectId}/${config.dataset}/sanity-${config.projectId}-${config.dataset}-${timestamp}.tar.gz`;
+    const objectKey = `${config.projectId}/${config.dataset}/${config.projectId}-${config.dataset}-${timestamp}.tar.gz`;
 
     await withRetry(
       () => uploadToR2(archivePath, objectKey),
