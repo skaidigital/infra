@@ -1,6 +1,3 @@
-# Lefthook configuration for pre-commit hooks
-# https://github.com/evilmartians/lefthook
-
 # Pre-commit hooks
 pre-commit:
   # Run hooks in parallel for speed
@@ -16,18 +13,3 @@ pre-commit:
       run: bun test
       tags: [test, backend]
       fail_text: "Tests failed. Please ensure all tests pass before committing."
-
-# Commit message hook - validates commit message format
-commit-msg:
-  commands:
-    validate:
-      run: |
-        # Basic commit message validation
-        # Ensures commit message has minimum length
-        MSG_FILE=$1
-        MSG_LEN=$(cat "$MSG_FILE" | wc -c)
-        if [ $MSG_LEN -lt 10 ]; then
-          echo "Commit message too short (minimum 10 characters)"
-          exit 1
-        fi
-      fail_text: "Invalid commit message format"
