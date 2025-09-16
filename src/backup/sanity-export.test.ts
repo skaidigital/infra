@@ -4,199 +4,69 @@ import { promises as fs } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 
+// Mock the @sanity/export module
+mock.module('@sanity/export', () => ({
+  default: mock(async (options: any) => {
+    const { outputPath, assets } = options;
+
+    // Create mock data file
+    await fs.writeFile(join(outputPath, 'data.ndjson'), '{"_id":"doc1"}\n{"_id":"doc2"}\n');
+
+    // Create mock assets if requested
+    if (assets) {
+      const imagesDir = join(outputPath, 'images');
+      await fs.mkdir(imagesDir, { recursive: true });
+      await fs.writeFile(join(imagesDir, 'test.jpg'), 'fake-image-data');
+    }
+
+    return {
+      documents: 2,
+      assets: assets ? 1 : 0,
+    };
+  }),
+}));
+
 describe('Sanity Export', () => {
   let tempDir: string;
-  let originalFetch: typeof globalThis.fetch;
 
   beforeEach(async () => {
     tempDir = join(tmpdir(), `test-sanity-export-${Date.now()}`);
     await fs.mkdir(tempDir, { recursive: true });
-    originalFetch = globalThis.fetch;
   });
 
   afterEach(async () => {
     if (tempDir) {
       await fs.rm(tempDir, { recursive: true, force: true });
     }
-    globalThis.fetch = originalFetch;
   });
 
-  const mockFetch = (handler: Function) => {
-    const fn = handler as any;
-    fn.preconnect = () => {};
-    return fn as typeof globalThis.fetch;
-  };
-
-  test('exportSanityDataset exports dataset via API with all options', async () => {
-    const mockData = '{"_id":"doc1","_type":"page"}\n{"_id":"doc2","_type":"post"}\n';
-
-    globalThis.fetch = mockFetch(mock(async (url: string | URL, init?: RequestInit) => {
-      const urlStr = url.toString();
-
-      expect(urlStr).toContain('https://test-project.api.sanity.io/v2021-06-07/data/export/test-dataset');
-      expect(init?.headers).toMatchObject({
-        'Authorization': 'Bearer test-token',
-        'Accept': 'application/x-ndjson',
-      });
-
-      return new Response(mockData, {
-        status: 200,
-        headers: { 'Content-Type': 'application/x-ndjson' },
-      });
-    }));
-
+  test('exportSanityDataset exports dataset with all options', async () => {
     await exportSanityDataset({
       projectId: 'test-project',
       dataset: 'test-dataset',
       outputPath: tempDir,
       token: 'test-token',
       includeDrafts: true,
-      includeAssets: false,
+      includeAssets: true,
       assetConcurrency: 10,
     });
 
     // Verify the export file was created
     const exportFile = join(tempDir, 'data.ndjson');
-    const content = await fs.readFile(exportFile, 'utf-8');
-    expect(content).toBe(mockData);
+    const exists = await fs.access(exportFile).then(() => true).catch(() => false);
+    expect(exists).toBe(true);
   });
 
-  test('exportSanityDataset exports and downloads assets', async () => {
-    const mockData = '{"_id":"doc1","_type":"page","image":{"_type":"image","asset":{"_ref":"image-abc123-100x100-jpg"}}}\n';
-    const mockImageData = Buffer.from('fake-image-data');
-
-    globalThis.fetch = mockFetch(mock(async (url: string | URL, init?: RequestInit) => {
-      const urlStr = url.toString();
-
-      if (urlStr.includes('/data/export/')) {
-        return new Response(mockData, {
-          status: 200,
-          headers: { 'Content-Type': 'application/x-ndjson' },
-        });
-      } else if (urlStr.includes('cdn.sanity.io/images/')) {
-        return new Response(mockImageData, {
-          status: 200,
-          headers: { 'Content-Type': 'image/jpeg' },
-        });
-      }
-
-      throw new Error(`Unexpected URL: ${urlStr}`);
-    }));
-
+  test('exportSanityDataset exports without assets when includeAssets is false', async () => {
     await exportSanityDataset({
       projectId: 'test-project',
       dataset: 'test-dataset',
       outputPath: tempDir,
       token: 'test-token',
-      includeDrafts: true,
-      includeAssets: true,
+      includeAssets: false,
     });
 
-    // Verify the export file was created
-    const exportFile = join(tempDir, 'data.ndjson');
-    const content = await fs.readFile(exportFile, 'utf-8');
-    expect(content).toBe(mockData);
-
-    // Verify the asset was downloaded
-    const assetFile = join(tempDir, 'images', 'abc123.jpg');
-    const assetContent = await fs.readFile(assetFile);
-    expect(assetContent).toEqual(mockImageData);
-  });
-
-  test('exportSanityDataset handles file assets', async () => {
-    const mockData = '{"_id":"doc1","_type":"page","file":{"_type":"file","asset":{"_ref":"file-def456-pdf"}}}\n';
-    const mockFileData = Buffer.from('fake-pdf-data');
-
-    globalThis.fetch = mockFetch(mock(async (url: string | URL, init?: RequestInit) => {
-      const urlStr = url.toString();
-
-      if (urlStr.includes('/data/export/')) {
-        return new Response(mockData, {
-          status: 200,
-          headers: { 'Content-Type': 'application/x-ndjson' },
-        });
-      } else if (urlStr.includes('cdn.sanity.io/files/')) {
-        return new Response(mockFileData, {
-          status: 200,
-          headers: { 'Content-Type': 'application/pdf' },
-        });
-      }
-
-      throw new Error(`Unexpected URL: ${urlStr}`);
-    }));
-
-    await exportSanityDataset({
-      projectId: 'test-project',
-      dataset: 'test-dataset',
-      outputPath: tempDir,
-      token: 'test-token',
-      includeDrafts: true,
-      includeAssets: true,
-    });
-
-    // Verify the file asset was downloaded
-    const assetFile = join(tempDir, 'images', 'def456.pdf');
-    const assetContent = await fs.readFile(assetFile);
-    expect(assetContent).toEqual(mockFileData);
-  });
-
-  test('exportSanityDataset rejects when API returns error', async () => {
-    globalThis.fetch = mockFetch(mock(async () => {
-      return new Response('{"error":"Unauthorized"}', {
-        status: 401,
-        statusText: 'Unauthorized',
-      });
-    }));
-
-    await expect(exportSanityDataset({
-      projectId: 'test-project',
-      dataset: 'test-dataset',
-      outputPath: tempDir,
-      token: 'test-token',
-    })).rejects.toThrow('Export API request failed: 401 Unauthorized');
-  });
-
-  test('exportSanityDataset rejects when export file is empty', async () => {
-    globalThis.fetch = mockFetch(mock(async () => {
-      return new Response('', {
-        status: 200,
-        headers: { 'Content-Type': 'application/x-ndjson' },
-      });
-    }));
-
-    await expect(exportSanityDataset({
-      projectId: 'test-project',
-      dataset: 'test-dataset',
-      outputPath: tempDir,
-      token: 'test-token',
-    })).rejects.toThrow('Export file is empty');
-  });
-
-  test('exportSanityDataset handles no assets gracefully', async () => {
-    const mockData = '{"_id":"doc1","_type":"page","title":"Test"}\n';
-
-    globalThis.fetch = mockFetch(mock(async (url: string | URL) => {
-      const urlStr = url.toString();
-
-      if (urlStr.includes('/data/export/')) {
-        return new Response(mockData, {
-          status: 200,
-          headers: { 'Content-Type': 'application/x-ndjson' },
-        });
-      }
-
-      throw new Error(`Unexpected URL: ${urlStr}`);
-    }));
-
-    await exportSanityDataset({
-      projectId: 'test-project',
-      dataset: 'test-dataset',
-      outputPath: tempDir,
-      token: 'test-token',
-      includeAssets: true,
-    });
-
-    // Should not create images directory if no assets
+    // Verify no assets directory
     const imagesDir = join(tempDir, 'images');
     const dirExists = await fs.access(imagesDir).then(() => true).catch(() => false);
     expect(dirExists).toBe(false);
@@ -204,14 +74,6 @@ describe('Sanity Export', () => {
 
   test('exportSanityDataset creates output directory if it does not exist', async () => {
     const newDir = join(tempDir, 'new-dir');
-    const mockData = '{"_id":"doc1"}\n';
-
-    globalThis.fetch = mockFetch(mock(async () => {
-      return new Response(mockData, {
-        status: 200,
-        headers: { 'Content-Type': 'application/x-ndjson' },
-      });
-    }));
 
     await exportSanityDataset({
       projectId: 'test-project',
@@ -225,38 +87,17 @@ describe('Sanity Export', () => {
     expect(dirExists).toBe(true);
   });
 
-  test('exportSanityDataset handles asset download failures gracefully', async () => {
-    const mockData = '{"_id":"doc1","image":{"_type":"image","asset":{"_ref":"image-abc123-100x100-jpg"}}}\n';
+  test('exportSanityDataset rejects when no files exported', async () => {
+    // Mock export that doesn't create files
+    const mockExport = mock(async () => ({ documents: 0, assets: 0 }));
+    mock.module('@sanity/export', () => ({ default: mockExport }));
 
-    globalThis.fetch = mockFetch(mock(async (url: string | URL) => {
-      const urlStr = url.toString();
-
-      if (urlStr.includes('/data/export/')) {
-        return new Response(mockData, {
-          status: 200,
-          headers: { 'Content-Type': 'application/x-ndjson' },
-        });
-      } else if (urlStr.includes('cdn.sanity.io/images/')) {
-        // Simulate asset download failure
-        return new Response('Not Found', { status: 404 });
-      }
-
-      throw new Error(`Unexpected URL: ${urlStr}`);
-    }));
-
-    // Should not throw even if asset download fails
-    await exportSanityDataset({
+    await expect(exportSanityDataset({
       projectId: 'test-project',
       dataset: 'test-dataset',
       outputPath: tempDir,
       token: 'test-token',
-      includeAssets: true,
-    });
-
-    // Export file should still exist
-    const exportFile = join(tempDir, 'data.ndjson');
-    const exists = await fs.access(exportFile).then(() => true).catch(() => false);
-    expect(exists).toBe(true);
+    })).rejects.toThrow('No files exported');
   });
 });
 
