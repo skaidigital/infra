@@ -193,11 +193,8 @@ function findAssetUrls(obj: any, urls: Set<string>, projectId: string, dataset: 
 
 async function downloadAsset(url: string, outputDir: string, token: string): Promise<void> {
   try {
-    const response = await fetch(url, {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-      },
-    });
+    // Sanity CDN assets are publicly accessible, no auth needed
+    const response = await fetch(url);
 
     if (!response.ok) {
       throw new Error(`Failed to download: ${response.status}`);
