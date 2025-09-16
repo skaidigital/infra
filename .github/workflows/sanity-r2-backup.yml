@@ -185,9 +185,13 @@ jobs:
             exit 1
           fi
 
-          # Run the backup script
-          echo "::notice::Running backup script at src/backup/index.ts..."
-          OUTPUT=$(bun run src/backup/index.ts 2>&1) || {
+          # Install tsx for Node.js TypeScript execution
+          echo "Installing tsx for TypeScript execution..."
+          npm install -g tsx
+
+          # Run the backup script with Node.js instead of Bun (compatibility issue with @sanity/export)
+          echo "::notice::Running backup script with Node.js..."
+          OUTPUT=$(tsx src/backup/index.ts 2>&1) || {
             EXIT_CODE=$?
             echo "::error::Backup failed with exit code $EXIT_CODE"
             echo "Output from backup script:"
