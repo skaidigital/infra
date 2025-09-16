@@ -17,15 +17,8 @@ mock.module('@sanity/export', () => ({
   default: mock(async (options: any) => {
     const { outputPath, assets } = options;
 
-    // Create mock data file
-    await fs.writeFile(join(outputPath, 'data.ndjson'), '{"_id":"doc1"}\n{"_id":"doc2"}\n');
-
-    // Create mock assets if requested
-    if (assets) {
-      const imagesDir = join(outputPath, 'images');
-      await fs.mkdir(imagesDir, { recursive: true });
-      await fs.writeFile(join(imagesDir, 'test.jpg'), 'fake-image-data');
-    }
+    // Create mock tarball file (outputPath is now a file path, not directory)
+    await fs.writeFile(outputPath, 'mock-tarball-content');
 
     return {
       documents: 2,
@@ -59,8 +52,8 @@ describe('Sanity Export', () => {
       assetConcurrency: 10,
     });
 
-    // Verify the export file was created
-    const exportFile = join(tempDir, 'data.ndjson');
+    // Verify the export tarball was created
+    const exportFile = join(tempDir, 'export.tar.gz');
     const exists = await fs.access(exportFile).then(() => true).catch(() => false);
     expect(exists).toBe(true);
   });
@@ -74,10 +67,10 @@ describe('Sanity Export', () => {
       includeAssets: false,
     });
 
-    // Verify no assets directory
-    const imagesDir = join(tempDir, 'images');
-    const dirExists = await fs.access(imagesDir).then(() => true).catch(() => false);
-    expect(dirExists).toBe(false);
+    // Verify the export tarball was created (without assets)
+    const exportFile = join(tempDir, 'export.tar.gz');
+    const exists = await fs.access(exportFile).then(() => true).catch(() => false);
+    expect(exists).toBe(true);
   });
 
   test('exportSanityDataset creates output directory if it does not exist', async () => {
@@ -95,9 +88,12 @@ describe('Sanity Export', () => {
     expect(dirExists).toBe(true);
   });
 
-  test('exportSanityDataset rejects when no files exported', async () => {
-    // Mock export that doesn't create files
-    const mockExport = mock(async () => ({ documents: 0, assets: 0 }));
+  test('exportSanityDataset rejects when export fails', async () => {
+    // Mock export that creates empty file
+    const mockExport = mock(async (options: any) => {
+      await fs.writeFile(options.outputPath, '');
+      return { documents: 0, assets: 0 };
+    });
     mock.module('@sanity/export', () => ({ default: mockExport }));
     mock.module('@sanity/client', () => ({
       createClient: mock(() => ({
@@ -111,7 +107,7 @@ describe('Sanity Export', () => {
       dataset: 'test-dataset',
       outputPath: tempDir,
       token: 'test-token',
-    })).rejects.toThrow('No files exported');
+    })).rejects.toThrow('Export file is empty');
   });
 });
 

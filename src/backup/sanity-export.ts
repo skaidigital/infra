@@ -39,10 +39,14 @@ export async function exportSanityDataset(options: ExportOptions): Promise<void>
     useCdn: false,
   });
 
+  // When raw is false, outputPath should be a tar.gz file
+  // When raw is true, outputPath should be a directory
+  const tarballPath = join(outputPath, 'export.tar.gz');
+
   const exportOptions = {
     client,
     dataset, // Export function needs dataset even though client has it
-    outputPath,
+    outputPath: tarballPath, // Use file path for tarball
     assets: includeAssets,
     raw: false, // Export as tarball
     drafts: includeDrafts,
@@ -81,48 +85,18 @@ export async function exportSanityDataset(options: ExportOptions): Promise<void>
       logger.info('Sanity export completed');
     }
 
-    // Verify the export was successful
-    const files = await fs.readdir(outputPath);
-    if (files.length === 0) {
-      throw new Error('No files exported');
-    }
-
-    // Check if data file exists
-    const dataFile = join(outputPath, 'data.ndjson');
+    // Verify the tarball was created
     try {
-      const stats = await fs.stat(dataFile);
-      logger.info('Export file created', {
+      const stats = await fs.stat(tarballPath);
+      if (stats.size === 0) {
+        throw new Error('Export file is empty');
+      }
+      logger.info('Export tarball created', {
+        path: tarballPath,
         fileSize: `${(stats.size / 1024 / 1024).toFixed(2)} MB`,
       });
     } catch (error) {
-      logger.warn('No data.ndjson file found, checking for tarball');
-    }
-
-    // Check for assets if requested
-    if (includeAssets) {
-      const imagesDir = join(outputPath, 'images');
-      const filesDir = join(outputPath, 'files');
-
-      let assetCount = 0;
-      try {
-        const imageFiles = await fs.readdir(imagesDir, { recursive: true });
-        assetCount += imageFiles.length;
-      } catch {
-        // No images directory
-      }
-
-      try {
-        const fileAssets = await fs.readdir(filesDir, { recursive: true });
-        assetCount += fileAssets.length;
-      } catch {
-        // No files directory
-      }
-
-      if (assetCount > 0) {
-        logger.info(`Exported ${assetCount} asset files`);
-      } else {
-        logger.info('No assets exported');
-      }
+      throw new Error(`Failed to create export tarball: ${(error as Error).message}`);
     }
 
   } catch (error) {

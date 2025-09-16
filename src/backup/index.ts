@@ -1,8 +1,6 @@
-import { createReadStream, createWriteStream, promises as fs } from 'fs';
-import { pipeline } from 'stream/promises';
+import { promises as fs } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
-import * as tar from 'tar';
 import { exportSanityDataset } from './sanity-export.ts';
 import { uploadToR2, deleteOldBackups } from './r2-upload.ts';
 import { sendNotification } from './notifications.ts';
@@ -73,17 +71,10 @@ export async function runBackup(): Promise<BackupResult> {
       1000
     );
 
-    // Step 2: Create tar.gz archive
-    logger.info('Creating archive...');
-    await tar.create(
-      {
-        gzip: true,
-        file: archivePath,
-        cwd: tempDir,
-        filter: (path: string) => !path.includes('.DS_Store'),
-      },
-      ['export']
-    );
+    // Step 2: Move the exported tarball to the final location
+    logger.info('Moving export to archive location...');
+    const exportTarball = join(exportDir, 'export.tar.gz');
+    await fs.rename(exportTarball, archivePath);
 
     // Step 3: Generate checksum
     logger.info('Generating checksum...');
