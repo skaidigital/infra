@@ -213,11 +213,16 @@ jobs:
           echo "::notice::Backup completed successfully"
 
       - name: Send failure notification
-        if: failure() && secrets.SLACK_WEBHOOK_URL != ''
+        if: failure()
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
         run: |
           # Send a direct failure notification as fallback
+          if [ -z "$SLACK_WEBHOOK_URL" ]; then
+            echo "::notice::SLACK_WEBHOOK_URL not configured, skipping failure notification"
+            exit 0
+          fi
+
           curl -X POST $SLACK_WEBHOOK_URL \
             -H 'Content-Type: application/json' \
             -d '{
