@@ -3,6 +3,7 @@ declare module '@sanity/export' {
 
   export interface ExportOptions {
     client: SanityClient;
+    dataset: string;
     outputPath: string;
     assets?: boolean;
     raw?: boolean;

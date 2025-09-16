@@ -41,6 +41,7 @@ export async function exportSanityDataset(options: ExportOptions): Promise<void>
 
   const exportOptions = {
     client,
+    dataset, // Export function needs dataset even though client has it
     outputPath,
     assets: includeAssets,
     raw: false, // Export as tarball
