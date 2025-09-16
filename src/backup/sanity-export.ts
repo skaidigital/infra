@@ -31,7 +31,6 @@ export async function exportSanityDataset(options: ExportOptions): Promise<void>
 
   // Build the export command arguments
   const args = [
-    '@sanity/cli',
     'dataset',
     'export',
     dataset,
@@ -54,8 +53,9 @@ export async function exportSanityDataset(options: ExportOptions): Promise<void>
   return new Promise((resolve, reject) => {
     logger.info('Running Sanity CLI export command...');
 
-    // Use npx to run @sanity/cli
-    const sanityProcess = spawn('npx', args, {
+    // Use bun to run @sanity/cli directly from node_modules
+    const sanityCliPath = join(process.cwd(), 'node_modules', '@sanity', 'cli', 'bin', 'sanity.js');
+    const sanityProcess = spawn('bun', [sanityCliPath, ...args], {
       env: {
         ...process.env,
         SANITY_AUTH_TOKEN: token,
