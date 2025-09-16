@@ -23,9 +23,12 @@ function getS3Client(): S3Client {
       throw new Error('R2 credentials not configured');
     }
 
+    // R2 buckets are in EU region
+    const endpoint = `https://${accountId}.eu.r2.cloudflarestorage.com`;
+
     s3Client = new S3Client({
-      region: process.env.R2_REGION || 'auto',
-      endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
+      region: 'auto', // Always use 'auto' for R2
+      endpoint,
       credentials: {
         accessKeyId,
         secretAccessKey,
