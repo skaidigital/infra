@@ -71,7 +71,7 @@ on:
 jobs:
   backup:
     name: Backup Sanity to R2
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-8vcpu-ubuntu-2204
     timeout-minutes: 120
     outputs:
       objectKey: ${{ steps.backup.outputs.objectKey }}
@@ -96,7 +96,10 @@ jobs:
           bun-version: latest
 
       - name: Install dependencies
-        run: bun install --frozen-lockfile
+        run: |
+          echo "Installing dependencies with Bun..."
+          bun install --frozen-lockfile
+          echo "Dependencies installed successfully"
 
       - name: Validate inputs
         run: |
@@ -151,13 +154,24 @@ jobs:
           ASSET_CONCURRENCY: ${{ inputs.assetConcurrency }}
         run: |
           set -e
-          echo "Starting backup for project: ${{ inputs.projectId }}, dataset: ${{ inputs.dataset }}"
+          echo "::notice::Starting backup for project: ${{ inputs.projectId }}, dataset: ${{ inputs.dataset }}"
+
+          # Check Node.js availability
+          echo "Node version: $(node --version)"
+          echo "Bun version: $(bun --version)"
+
+          # List installed packages
+          echo "Checking @sanity/export installation..."
+          ls -la node_modules/@sanity/ || echo "No @sanity modules found"
 
           # Run the backup script
+          echo "::notice::Running backup script..."
           OUTPUT=$(bun run src/backup/index.ts 2>&1) || {
-            echo "::error::Backup failed with exit code $?"
+            EXIT_CODE=$?
+            echo "::error::Backup failed with exit code $EXIT_CODE"
+            echo "Error output:"
             echo "$OUTPUT"
-            exit 1
+            exit $EXIT_CODE
           }
 
           # Parse output for workflow outputs
@@ -170,7 +184,7 @@ jobs:
           echo "objectSize=$OBJECT_SIZE" >> $GITHUB_OUTPUT
           echo "backupTimestamp=$BACKUP_TIMESTAMP" >> $GITHUB_OUTPUT
 
-          echo "Backup completed successfully"
+          echo "::notice::Backup completed successfully"
 
       - name: Upload logs on failure
         if: failure()
