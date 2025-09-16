@@ -406,6 +406,25 @@ We use semantic versioning for this workflow:
 - **v1.x.x** - Specific patch version
 - **main** - Latest development version (use with caution)
 
+### ⚠️ Breaking Change in v1.2.0+
+
+**If upgrading from v1.1.x or earlier**, you must update your calling workflows:
+
+#### Remove from `with:` section:
+```yaml
+# ❌ REMOVE THIS LINE - no longer supported
+slackWebhookUrl: ${{ secrets.SLACK_WEBHOOK_URL }}
+```
+
+#### Add to `secrets:` section:
+```yaml
+secrets:
+  # ... other secrets ...
+  SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}  # ✅ Add here for notifications
+```
+
+**Note**: If you don't need Slack notifications, simply omit `SLACK_WEBHOOK_URL` from secrets.
+
 ### Updating Your Workflow
 
 When we release updates, you can update your workflow by changing the tag:
