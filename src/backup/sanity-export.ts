@@ -1,5 +1,4 @@
-import { spawn } from 'child_process';
-import { promises as fs, existsSync } from 'fs';
+import { promises as fs } from 'fs';
 import { join } from 'path';
 import { logger } from '../utils/logger.ts';
 
@@ -29,199 +28,215 @@ export async function exportSanityDataset(options: ExportOptions): Promise<void>
   // Ensure output directory exists before any operations
   await fs.mkdir(outputPath, { recursive: true });
 
-  // Build the export command arguments
-  const args = [
-    'dataset',
-    'export',
-    dataset,
-    join(outputPath, 'data.ndjson'),
-    '--project', projectId,
-    '--token', token,
-    '--overwrite',
-  ];
+  // Use Sanity Export API directly
+  // Note: The export API endpoint doesn't support excludeDrafts parameter
+  // It always includes drafts when authenticated
+  const exportUrl = `https://${projectId}.api.sanity.io/v2021-06-07/data/export/${dataset}`;
 
-  if (!includeDrafts) {
-    args.push('--no-drafts');
-  }
+  logger.info('Starting dataset export via API...');
 
-  if (!includeAssets) {
-    args.push('--no-assets');
-  } else {
-    args.push('--asset-concurrency', assetConcurrency.toString());
-  }
+  try {
+    // Export documents
+    const response = await fetch(exportUrl, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Accept': 'application/x-ndjson',
+      },
+    });
 
-  return new Promise((resolve, reject) => {
-    logger.info('Running Sanity CLI export command...');
-
-    // Try multiple possible locations for the Sanity CLI
-    const possiblePaths = [
-      // In GitHub Actions, the working directory is where the infra repo is checked out
-      join(process.cwd(), 'node_modules', '@sanity', 'cli', 'bin', 'sanity.js'),
-      // Try relative to this file's location
-      join(__dirname, '..', '..', 'node_modules', '@sanity', 'cli', 'bin', 'sanity.js'),
-    ];
-
-    // Try using require.resolve as a separate step
-    try {
-      possiblePaths.push(require.resolve('@sanity/cli/bin/sanity.js'));
-    } catch {
-      // Ignore if not found
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Export API request failed: ${response.status} ${response.statusText} - ${errorText}`);
     }
 
-    let sanityCliPath: string | undefined;
-    for (const path of possiblePaths) {
-      // Check if file exists
-      if (existsSync(path)) {
-        sanityCliPath = path;
-        logger.info(`Found Sanity CLI at: ${path}`);
-        break;
+    if (!response.body) {
+      throw new Error('No response body from export API');
+    }
+
+    // Stream the export data to file
+    const exportFile = join(outputPath, 'data.ndjson');
+
+    // Use Bun's file writing capabilities directly
+    const arrayBuffer = await response.arrayBuffer();
+    await fs.writeFile(exportFile, Buffer.from(arrayBuffer));
+
+    logger.info('Dataset export completed');
+
+    // Verify the export was successful
+    const stats = await fs.stat(exportFile);
+    if (stats.size === 0) {
+      throw new Error('Export file is empty');
+    }
+
+    logger.info('Export file created', {
+      fileSize: `${(stats.size / 1024 / 1024).toFixed(2)} MB`,
+    });
+
+    // Handle assets export if requested
+    if (includeAssets) {
+      await exportAssets(projectId, dataset, outputPath, token, assetConcurrency);
+    }
+
+  } catch (error) {
+    const errorMessage = (error as Error)?.message || String(error) || 'Unknown error';
+    logger.error('Sanity export failed', new Error(errorMessage));
+    throw new Error(`Sanity export failed: ${errorMessage}`);
+  }
+}
+
+async function exportAssets(
+  projectId: string,
+  dataset: string,
+  outputPath: string,
+  token: string,
+  assetConcurrency: number
+): Promise<void> {
+  logger.info('Starting asset export...');
+
+  try {
+    // Read the exported data to find asset references
+    const exportFile = join(outputPath, 'data.ndjson');
+    const data = await fs.readFile(exportFile, 'utf-8');
+    const lines = data.split('\n').filter(line => line.trim());
+
+    const assetUrls = new Set<string>();
+
+    for (const line of lines) {
+      try {
+        const doc = JSON.parse(line);
+        // Find asset references in the document
+        findAssetUrls(doc, assetUrls, projectId, dataset);
+      } catch {
+        // Skip invalid JSON lines
       }
     }
 
-    if (!sanityCliPath) {
-      // Fallback to using npx which should work universally
-      logger.info('Could not find Sanity CLI directly, falling back to npx');
-      const sanityProcess = spawn('npx', ['@sanity/cli', ...args], {
-        env: {
-          ...process.env,
-          SANITY_AUTH_TOKEN: token,
-        },
-        stdio: ['inherit', 'pipe', 'pipe'],
-      });
-
-      setupProcessHandlers(sanityProcess, outputPath, token, resolve, reject, includeAssets);
+    if (assetUrls.size === 0) {
+      logger.info('No assets found to export');
       return;
     }
 
-    const sanityProcess = spawn('bun', [sanityCliPath, ...args], {
-      env: {
-        ...process.env,
-        SANITY_AUTH_TOKEN: token,
+    logger.info(`Found ${assetUrls.size} assets to download`);
+
+    // Create images directory
+    const imagesDir = join(outputPath, 'images');
+    await fs.mkdir(imagesDir, { recursive: true });
+
+    // Download assets with concurrency control
+    const urls = Array.from(assetUrls);
+    const results = [];
+
+    for (let i = 0; i < urls.length; i += assetConcurrency) {
+      const batch = urls.slice(i, i + assetConcurrency);
+      const batchResults = await Promise.allSettled(
+        batch.map(url => downloadAsset(url, imagesDir, token))
+      );
+      results.push(...batchResults);
+    }
+
+    const successful = results.filter(r => r.status === 'fulfilled').length;
+    const failed = results.filter(r => r.status === 'rejected').length;
+
+    logger.info(`Asset export completed: ${successful} successful, ${failed} failed`);
+
+    if (failed > 0) {
+      logger.warn(`Failed to download ${failed} assets`);
+    }
+  } catch (error) {
+    logger.warn('Asset export failed', error as Error);
+    // Don't fail the entire export if assets fail
+  }
+}
+
+function findAssetUrls(obj: any, urls: Set<string>, projectId: string, dataset: string): void {
+  if (!obj || typeof obj !== 'object') return;
+
+  // Check for Sanity image/file references
+  if (obj._type === 'image' && obj.asset?._ref) {
+    const ref = obj.asset._ref;
+    if (ref.startsWith('image-')) {
+      // Parse image reference: image-{id}-{dimensions}-{format}
+      const match = ref.match(/^image-([a-f0-9]+)-([0-9]+x[0-9]+)-([a-z]+)$/);
+      if (match) {
+        const [, id, , format] = match;
+        const url = `https://cdn.sanity.io/images/${projectId}/${dataset}/${id}.${format}`;
+        urls.add(url);
+      }
+    }
+  }
+
+  if (obj._type === 'file' && obj.asset?._ref) {
+    const ref = obj.asset._ref;
+    if (ref.startsWith('file-')) {
+      // Parse file reference: file-{id}-{extension}
+      const match = ref.match(/^file-([a-f0-9]+)-([a-z0-9]+)$/);
+      if (match) {
+        const [, id, ext] = match;
+        const url = `https://cdn.sanity.io/files/${projectId}/${dataset}/${id}.${ext}`;
+        urls.add(url);
+      }
+    }
+  }
+
+  // Recursively search for assets
+  if (Array.isArray(obj)) {
+    for (const item of obj) {
+      findAssetUrls(item, urls, projectId, dataset);
+    }
+  } else {
+    for (const value of Object.values(obj)) {
+      findAssetUrls(value, urls, projectId, dataset);
+    }
+  }
+}
+
+async function downloadAsset(url: string, outputDir: string, token: string): Promise<void> {
+  try {
+    const response = await fetch(url, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
       },
-      stdio: ['inherit', 'pipe', 'pipe'],
     });
 
-    setupProcessHandlers(sanityProcess, outputPath, token, resolve, reject, includeAssets);
-  });
+    if (!response.ok) {
+      throw new Error(`Failed to download: ${response.status}`);
+    }
+
+    // Extract filename from URL
+    const urlParts = url.split('/');
+    const filename = urlParts[urlParts.length - 1];
+    const filepath = join(outputDir, filename);
+
+    const buffer = await response.arrayBuffer();
+    await fs.writeFile(filepath, Buffer.from(buffer));
+  } catch (error) {
+    throw new Error(`Failed to download asset ${url}: ${(error as Error).message}`);
+  }
 }
 
-function setupProcessHandlers(
-  sanityProcess: any,
-  outputPath: string,
-  token: string,
-  resolve: (value: void | PromiseLike<void>) => void,
-  reject: (reason?: any) => void,
-  includeAssets: boolean = true
-): void {
-  let stdout = '';
-  let stderr = '';
-
-  // Handle spawn errors immediately
-  sanityProcess.on('error', (error: any) => {
-      logger.error('Failed to spawn Sanity CLI', error);
-      const errorMessage = error?.message || error?.code || String(error) || 'Unknown error';
-      reject(new Error(`Failed to start Sanity export: ${errorMessage}`));
-    });
-
-    sanityProcess.stdout?.on('data', (data: Buffer) => {
-      const output = data.toString();
-      stdout += output;
-      // Log progress without exposing sensitive data
-      const lines = output.split('\n').filter((line: string) => line.trim());
-      lines.forEach((line: string) => {
-        if (line.includes('Exporting') || line.includes('Done') || line.includes('%')) {
-          logger.info(line.replace(token, '[REDACTED]'));
-        }
-      });
-    });
-
-    sanityProcess.stderr?.on('data', (data: Buffer) => {
-      const output = data.toString();
-      stderr += output;
-      // Only log non-sensitive errors
-      if (!output.includes(token)) {
-        logger.warn('Sanity CLI stderr', new Error(output));
-      }
-    });
-
-    sanityProcess.on('close', async (code: number | null) => {
-      if (code === 0) {
-        try {
-          // Verify the export was successful
-          const exportFile = join(outputPath, 'data.ndjson');
-          const stats = await fs.stat(exportFile);
-
-          if (stats.size === 0) {
-            reject(new Error('Export file is empty'));
-            return;
-          }
-
-          // Check for assets directory if assets were included
-          if (includeAssets) {
-            const assetsDir = join(outputPath, 'images');
-            try {
-              await fs.access(assetsDir);
-              const assetFiles = await fs.readdir(assetsDir, { recursive: true });
-              logger.info(`Exported ${assetFiles.length} asset files`);
-            } catch {
-              logger.info('No assets exported (directory does not exist)');
-            }
-          }
-
-          logger.info('Sanity export completed successfully', {
-            fileSize: `${(stats.size / 1024 / 1024).toFixed(2)} MB`,
-          });
-
-          resolve();
-        } catch (error) {
-          const errorMessage = (error as Error)?.message || String(error) || 'Unknown error';
-          reject(new Error(`Export verification failed: ${errorMessage}`));
-        }
-      } else {
-        const errorMessage = stderr || stdout || 'Unknown error';
-        logger.error('Sanity export failed', new Error(errorMessage));
-        reject(new Error(`Sanity export failed with code ${code}: ${errorMessage}`));
-      }
-    });
-}
 
 export async function validateSanityCredentials(
   projectId: string,
   token: string
 ): Promise<boolean> {
-  return new Promise((resolve) => {
-    const args = [
-      'projects',
-      'list',
-      '--token', token,
-    ];
-
-    const sanityProcess = spawn('npx', ['@sanity/cli', ...args], {
-      env: {
-        ...process.env,
-        SANITY_AUTH_TOKEN: token,
+  try {
+    // Use Sanity API to validate credentials by attempting to fetch project info
+    const response = await fetch(`https://api.sanity.io/v2021-06-07/projects/${projectId}`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
       },
-      stdio: ['inherit', 'pipe', 'pipe'],
     });
 
-    let stdout = '';
-
-    sanityProcess.stdout?.on('data', (data: Buffer) => {
-      stdout += data.toString();
-    });
-
-    sanityProcess.on('close', (code) => {
-      if (code === 0 && stdout.includes(projectId)) {
-        logger.info('Sanity credentials validated successfully');
-        resolve(true);
-      } else {
-        logger.error('Sanity credentials validation failed', new Error('Invalid credentials or project not found'));
-        resolve(false);
-      }
-    });
-
-    sanityProcess.on('error', () => {
-      resolve(false);
-    });
-  });
+    if (response.ok) {
+      logger.info('Sanity credentials validated successfully');
+      return true;
+    } else {
+      logger.error('Sanity credentials validation failed', new Error(`Status: ${response.status}`));
+      return false;
+    }
+  } catch (error) {
+    logger.error('Sanity credentials validation failed', error as Error);
+    return false;
+  }
 }
