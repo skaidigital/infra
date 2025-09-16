@@ -54,7 +54,8 @@ export async function exportSanityDataset(options: ExportOptions): Promise<void>
     logger.info('Running Sanity CLI export command...');
 
     // Use bun to run @sanity/cli directly from node_modules
-    const sanityCliPath = join(process.cwd(), 'node_modules', '@sanity', 'cli', 'bin', 'sanity.js');
+    // __dirname gives us the directory of this file, we need to go up to find node_modules
+    const sanityCliPath = join(__dirname, '..', '..', 'node_modules', '@sanity', 'cli', 'bin', 'sanity.js');
     const sanityProcess = spawn('bun', [sanityCliPath, ...args], {
       env: {
         ...process.env,
