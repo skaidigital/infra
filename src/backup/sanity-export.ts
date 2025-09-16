@@ -52,6 +52,14 @@ export async function exportSanityDataset(options: ExportOptions): Promise<void>
 
   try {
     // Run the export
+    logger.info('Calling exportDataset with options', {
+      projectId: exportOptions.projectId,
+      dataset: exportOptions.dataset,
+      hasToken: !!exportOptions.token,
+      assets: exportOptions.assets,
+      drafts: exportOptions.drafts,
+    });
+
     const result = await exportDataset(exportOptions);
 
     // Log results
