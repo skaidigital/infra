@@ -18,14 +18,9 @@ jobs:
       - name: Checkout infrastructure repository
         uses: actions/checkout@v4
 
-      - name: Setup Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.11'
-
       - name: Install Claude Code SDK
         run: |
-          pip install claude-code-sdk
+          npm install @anthropic-ai/claude-code-sdk
 
       - name: Validate secrets
         run: |
@@ -44,6 +39,7 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
         with:
+          github-token: ${{ secrets.PRIVATE_REPOS_PAT }}
           script: |
             const script = await import('file://' + process.cwd() + '/.github/scripts/process-pushes.js')
             await script.default({github, context, core})

@@ -1,5 +1,4 @@
-import { execSync } from 'child_process';
-import { writeFileSync, readFileSync, existsSync, unlinkSync } from 'fs';
+import { readFileSync, existsSync, writeFileSync } from 'fs';
 
 export default async ({ github, context, core }) => {
   // Read monitored repositories from config file
@@ -114,47 +113,25 @@ ${commitData.files.map(f => `- ${f.filename} (${f.status})`).join('\n')}
 Please provide a concise 2-3 sentence summary that explains what changed and the business impact, based on the commit message and file changes. Focus on the 'what' and 'why', not technical implementation details.`;
 
   try {
-    // Create Python script to call Claude SDK
-    const pythonScript = `
-import asyncio
-import sys
-from claude_code_sdk import query
+    // Import Claude Code SDK dynamically
+    const { query } = await import('@anthropic-ai/claude-code-sdk');
 
-async def main():
-    prompt = """${prompt.replace(/"/g, '\\"')}"""
-
-    try:
-        result_text = ""
-        async for message in query(prompt=prompt):
-            if hasattr(message, 'content'):
-                for content in message.content:
-                    if hasattr(content, 'text'):
-                        result_text += content.text
-            else:
-                result_text += str(message)
-
-        print(result_text.strip())
-    except Exception as e:
-        print(f"Error: {e}", file=sys.stderr)
-        sys.exit(1)
-
-if __name__ == "__main__":
-    asyncio.run(main())
-`;
-
-    // Write Python script to temp file
-    writeFileSync('temp_claude_script.py', pythonScript);
-
-    // Execute Python script
-    const result = execSync('python temp_claude_script.py', {
-      encoding: 'utf8',
-      env: { ...process.env, ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY }
+    let result = '';
+    const messages = query(prompt, {
+      apiKey: process.env.ANTHROPIC_API_KEY
     });
 
-    // Clean up temp file
-    unlinkSync('temp_claude_script.py');
+    for await (const message of messages) {
+      if (message.content) {
+        for (const content of message.content) {
+          if (content.text) {
+            result += content.text;
+          }
+        }
+      }
+    }
 
-    return result.trim();
+    return result.trim() || `Recent changes to ${commitData.repository} by ${commitData.author}. ${commitData.message}`;
 
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
