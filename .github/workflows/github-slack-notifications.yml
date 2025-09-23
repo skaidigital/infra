@@ -45,5 +45,5 @@ jobs:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
         with:
           script: |
-            const script = await import('./.github/scripts/process-pushes.js')
+            const script = await import('file://' + process.cwd() + '/.github/scripts/process-pushes.js')
             await script.default({github, context, core})
