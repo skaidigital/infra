@@ -1,0 +1,52 @@
+name: GitHub Push Notifications to Slack
+
+on:
+  schedule:
+    # Run every 5 minutes to check for new pushes
+    - cron: '*/5 * * * *'
+  workflow_dispatch: # Allow manual triggering
+
+env:
+  # Hardcoded list of repositories to monitor
+  MONITORED_REPOS: 'repo1,repo2,repo3'
+
+jobs:
+  notify-pushes:
+    name: Check for new pushes and notify Slack
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout infrastructure repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install Claude Code SDK
+        run: |
+          pip install claude-code-sdk
+
+      - name: Validate secrets
+        run: |
+          if [ -z "${{ secrets.ANTHROPIC_API_KEY }}" ]; then
+            echo "::error::ANTHROPIC_API_KEY secret is not set"
+            exit 1
+          fi
+          if [ -z "${{ secrets.SLACK_SKAI_NOTIFICATION_CHANNEL_WEBHOOK_URL }}" ]; then
+            echo "::error::SLACK_SKAI_NOTIFICATION_CHANNEL_WEBHOOK_URL secret is not set"
+            exit 1
+          fi
+
+      - name: Process repository pushes
+        uses: actions/github-script@v7
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_SKAI_NOTIFICATION_CHANNEL_WEBHOOK_URL }}
+          MONITORED_REPOS: ${{ env.MONITORED_REPOS }}
+        with:
+          script: |
+            const script = await import('./.github/scripts/process-pushes.ts')
+            await script.default({github, context, core})
