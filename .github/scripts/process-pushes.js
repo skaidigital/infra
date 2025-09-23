@@ -101,43 +101,8 @@ function updateLastCheckTime(time) {
 }
 
 async function generateAISummary(commitData) {
-  const prompt = `Summarize these git changes for a Slack notification:
-
-Repository: ${commitData.repository}
-Author: ${commitData.author}
-Commit Message: ${commitData.message}
-
-Files Changed:
-${commitData.files.map(f => `- ${f.filename} (${f.status})`).join('\n')}
-
-Please provide a concise 2-3 sentence summary that explains what changed and the business impact, based on the commit message and file changes. Focus on the 'what' and 'why', not technical implementation details.`;
-
-  try {
-    // Import Claude Code SDK dynamically
-    const { query } = await import('@anthropic-ai/claude-code-sdk');
-
-    let result = '';
-    const messages = query(prompt, {
-      apiKey: process.env.ANTHROPIC_API_KEY
-    });
-
-    for await (const message of messages) {
-      if (message.content) {
-        for (const content of message.content) {
-          if (content.text) {
-            result += content.text;
-          }
-        }
-      }
-    }
-
-    return result.trim() || `Recent changes to ${commitData.repository} by ${commitData.author}. ${commitData.message}`;
-
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    console.error('AI summarization failed:', errorMessage);
-    return `Recent changes to ${commitData.repository} by ${commitData.author}. ${commitData.message}`;
-  }
+  // For now, just return the commit title and message instead of AI summary
+  return `**${commitData.message}**\n\nBy ${commitData.author}`;
 }
 
 async function sendSlackNotification(commitData, summary) {
