@@ -6,9 +6,7 @@ on:
     - cron: '*/5 * * * *'
   workflow_dispatch: # Allow manual triggering
 
-env:
-  # Hardcoded list of repositories to monitor
-  MONITORED_REPOS: 'repo1,repo2,repo3'
+# No environment variables needed - repositories are defined in .github/config/monitored-repos.json
 
 jobs:
   notify-pushes:
@@ -45,7 +43,6 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-          MONITORED_REPOS: ${{ env.MONITORED_REPOS }}
         with:
           script: |
             const script = await import('./.github/scripts/process-pushes.ts')
