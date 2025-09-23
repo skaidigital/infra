@@ -1,11 +1,20 @@
-# Sanity to Cloudflare R2 Backup Workflow
+# Infrastructure Automation Hub
 
 [![Version](https://img.shields.io/badge/version-v1-blue)](https://github.com/skaidigital/infra/releases)
 
-Automated backup solution for Sanity datasets to Cloudflare R2 storage with retention management, notifications, and GitHub Actions integration.
+Centralized infrastructure automation and monitoring for SKAI Digital, featuring automated backups, intelligent notifications, and GitHub Actions workflows.
+
+## Workflows Available
+
+### 🔄 Sanity to Cloudflare R2 Backup
+Automated backup solution for Sanity datasets to Cloudflare R2 storage with retention management and notifications.
+
+### 🔔 GitHub Push Notifications to Slack
+AI-powered monitoring system that posts intelligent summaries of main branch pushes to Slack channels.
 
 ## Features
 
+### Sanity Backup Features
 - 🔄 **Automated Backups**: Schedule daily backups via GitHub Actions
 - 📦 **Compressed Archives**: Efficient tar.gz compression
 - ✅ **Data Integrity**: SHA256 checksums for all backups
@@ -15,26 +24,83 @@ Automated backup solution for Sanity datasets to Cloudflare R2 storage with rete
 - 🔁 **Retry Logic**: Exponential backoff for transient failures
 - 🚀 **High Performance**: Built with Bun runtime
 
-## Complete Setup Guide
+### GitHub Notifications Features
+- 🤖 **AI-Powered Summaries**: Claude SDK generates intelligent commit summaries
+- 📊 **Repository Monitoring**: Tracks pushes to main branches across multiple repos
+- 💬 **Rich Slack Messages**: Formatted notifications with author, files, and links
+- ⚡ **Real-Time Updates**: 5-minute polling for immediate notifications
+- 🎯 **Self-Monitoring**: Can monitor its own repository for infrastructure changes
+- 📝 **Simple Configuration**: JSON-based repository management
+- 🔧 **Error Isolation**: Issues with one repository don't affect others
 
-### Prerequisites
+## Setup Guides
+
+### 🔔 GitHub Push Notifications Setup
+
+Monitor repository pushes and get AI-powered Slack notifications.
+
+#### Prerequisites
+- GitHub organization with repositories to monitor
+- Slack workspace with webhook access
+- Anthropic API key for Claude integration
+
+#### Quick Setup
+
+1. **Configure Organization Secrets**
+   - Go to GitHub Organization → Settings → Secrets → Actions
+   - Add these secrets:
+     - `ANTHROPIC_API_KEY`: Your Claude API key (get from [console.anthropic.com](https://console.anthropic.com))
+     - `SLACK_WEBHOOK_URL`: Your Slack webhook URL
+
+2. **Configure Monitored Repositories**
+   - Edit `.github/config/monitored-repos.json` in this repository
+   - Add repository names to monitor:
+   ```json
+   {
+     "repositories": [
+       "infra",
+       "skai-admin",
+       "your-other-repo"
+     ]
+   }
+   ```
+
+3. **Activate the Workflow**
+   - The workflow runs automatically every 5 minutes
+   - Test manually: Actions → "GitHub Push Notifications to Slack" → Run workflow
+
+#### How It Works
+- Monitors main branch pushes across configured repositories
+- Uses Claude SDK to generate intelligent commit summaries
+- Posts rich Slack notifications with author info, file changes, and links
+- Self-monitors the infra repository for infrastructure changes
+
+---
+
+### 🔄 Sanity Backup Setup
+
+Automate backups of Sanity datasets to Cloudflare R2 storage.
+
+#### Prerequisites
 
 1. **Sanity Project**: You need a Sanity project with data to backup
 2. **Cloudflare R2**: Active R2 account with a bucket created
 3. **GitHub Organization**: This workflow uses organization-level secrets
 
-### Step 1: Configure Organization Secrets (One-Time Setup)
+#### Step 1: Configure Organization Secrets (One-Time Setup)
 
 **Location**: GitHub Organization → Settings → Secrets and variables → Actions → Secrets
 
 Add these **organization secrets** that will be shared across all repos:
 
-| Secret Name | Where to Find It | Description |
-|------------|------------------|-------------|
-| `R2_ACCOUNT_ID` | Cloudflare Dashboard → R2 → Overview | Your Cloudflare account ID |
-| `R2_ACCESS_KEY_ID` | Cloudflare → R2 → Manage R2 API Tokens → Create API Token | R2 access key |
-| `R2_SECRET_ACCESS_KEY` | Cloudflare → R2 → Manage R2 API Tokens → Create API Token | R2 secret key |
-| `R2_BUCKET` | Cloudflare → R2 → Your bucket name | Name of your R2 bucket (e.g., `backups`) |
+| Secret Name | Where to Find It | Description | Used By |
+|------------|------------------|-------------|---------|
+| `ANTHROPIC_API_KEY` | [console.anthropic.com](https://console.anthropic.com) → API → Create Key | Claude API key for AI summaries | GitHub Notifications |
+| `SLACK_WEBHOOK_URL` | Slack → Apps → Incoming Webhooks | Webhook URL for notifications | GitHub Notifications |
+| `R2_ACCOUNT_ID` | Cloudflare Dashboard → R2 → Overview | Your Cloudflare account ID | Sanity Backups |
+| `R2_ACCESS_KEY_ID` | Cloudflare → R2 → Manage R2 API Tokens → Create API Token | R2 access key | Sanity Backups |
+| `R2_SECRET_ACCESS_KEY` | Cloudflare → R2 → Manage R2 API Tokens → Create API Token | R2 secret key | Sanity Backups |
+| `R2_BUCKET` | Cloudflare → R2 → Your bucket name | Name of your R2 bucket (e.g., `backups`) | Sanity Backups |
 
 **Access Configuration**: Choose which repos can use these secrets:
 - All repositories
@@ -121,14 +187,15 @@ These are **not secrets** - put them directly in your workflow file:
 
 #### Secrets Configuration Summary
 
-| Secret | Where to Add | Where to Find | Scope |
-|--------|--------------|---------------|--------|
-| `R2_ACCOUNT_ID` | GitHub Organization | Cloudflare Dashboard | All backup repos |
-| `R2_ACCESS_KEY_ID` | GitHub Organization | Cloudflare R2 API Tokens | All backup repos |
-| `R2_SECRET_ACCESS_KEY` | GitHub Organization | Cloudflare R2 API Tokens | All backup repos |
-| `R2_BUCKET` | GitHub Organization | Your R2 bucket name | All backup repos |
-| `SANITY_TOKEN` | Each Project Repository | Sanity.io → API → Tokens | Per project |
-| `SLACK_WEBHOOK_URL` | Each Project Repository | Slack App → Incoming Webhooks | Per project (optional) |
+| Secret | Where to Add | Where to Find | Scope | Used By |
+|--------|--------------|---------------|--------|---------|
+| `ANTHROPIC_API_KEY` | GitHub Organization | console.anthropic.com | All repos | GitHub Notifications |
+| `SLACK_WEBHOOK_URL` | GitHub Organization | Slack App → Incoming Webhooks | All repos | GitHub Notifications |
+| `R2_ACCOUNT_ID` | GitHub Organization | Cloudflare Dashboard | All backup repos | Sanity Backups |
+| `R2_ACCESS_KEY_ID` | GitHub Organization | Cloudflare R2 API Tokens | All backup repos | Sanity Backups |
+| `R2_SECRET_ACCESS_KEY` | GitHub Organization | Cloudflare R2 API Tokens | All backup repos | Sanity Backups |
+| `R2_BUCKET` | GitHub Organization | Your R2 bucket name | All backup repos | Sanity Backups |
+| `SANITY_TOKEN` | Each Project Repository | Sanity.io → API → Tokens | Per project | Sanity Backups |
 
 ### Finding Your Configuration Values
 

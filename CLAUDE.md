@@ -4,7 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a Sanity to Cloudflare R2 backup workflow system built with Bun runtime and TypeScript. It provides automated backup of Sanity datasets with compression, integrity checking, retention management, and notifications.
+This is an infrastructure automation hub for SKAI Digital built with Bun runtime and TypeScript. It provides multiple automated workflows:
+
+1. **Sanity to Cloudflare R2 Backup**: Automated backup of Sanity datasets with compression, integrity checking, retention management, and notifications.
+
+2. **GitHub Push Notifications to Slack**: AI-powered monitoring system that posts intelligent summaries of main branch pushes to Slack channels using Claude SDK.
 
 ## Development Commands
 
@@ -65,10 +69,17 @@ The codebase follows a modular architecture with clear separation of concerns:
 
 ### GitHub Actions Integration
 
-The project includes a reusable workflow (`.github/workflows/sanity-r2-backup.yml`) that can be called from other repositories. It validates inputs, manages secrets, and reports job outputs.
+The project includes multiple GitHub Actions workflows:
+
+1. **Sanity R2 Backup** (`.github/workflows/sanity-r2-backup.yml`) - Reusable workflow that can be called from other repositories. It validates inputs, manages secrets, and reports job outputs.
+
+2. **GitHub Slack Notifications** (`.github/workflows/github-slack-notifications.yml`) - Monitors repository pushes and posts AI-generated summaries to Slack. Includes:
+   - **Push Processing Script** (`.github/scripts/process-pushes.ts`) - TypeScript script that integrates GitHub API, Claude SDK, and Slack webhooks
+   - **Repository Configuration** (`.github/config/monitored-repos.json`) - JSON configuration for repositories to monitor
 
 ## Environment Variables
 
+### For Sanity Backup Development
 Required environment variables (see `.env.example`):
 - `SANITY_TOKEN`: Authentication token for Sanity
 - `SANITY_PROJECT_ID`: Sanity project identifier
@@ -77,6 +88,12 @@ Required environment variables (see `.env.example`):
 - `R2_ACCESS_KEY_ID`: R2 access key
 - `R2_SECRET_ACCESS_KEY`: R2 secret key
 - `R2_BUCKET`: Target R2 bucket name
+
+### For GitHub Actions (Organization Secrets)
+Required organization secrets:
+- `ANTHROPIC_API_KEY`: Claude API key for AI summaries
+- `SLACK_WEBHOOK_URL`: Slack webhook URL for notifications
+- Plus all R2 secrets listed above for backup workflows
 
 ## Testing Strategy
 
