@@ -18,9 +18,9 @@ jobs:
       - name: Checkout infrastructure repository
         uses: actions/checkout@v4
 
-      - name: Install Claude Code SDK
+      - name: Install Claude Code SDK and CLI
         run: |
-          npm install @anthropic-ai/claude-code-sdk
+          npm install @anthropic-ai/claude-code-sdk @anthropic-ai/claude-code
 
       - name: Validate secrets
         run: |
