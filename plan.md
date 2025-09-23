@@ -115,9 +115,7 @@ on:
     - cron: '*/5 * * * *'
   workflow_dispatch: # Allow manual triggering
 
-env:
-  # Hardcoded list of repositories to monitor
-  MONITORED_REPOS: 'repo1,repo2,repo3'
+# No environment variables needed - repositories are defined in .github/config/monitored-repos.json
 
 jobs:
   notify-pushes:
@@ -154,7 +152,6 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-          MONITORED_REPOS: ${{ env.MONITORED_REPOS }}
         with:
           script: |
             const script = await import('./.github/scripts/process-pushes.ts')
@@ -178,7 +175,19 @@ interface ScriptParams {
 }
 
 export default async ({github, context, core}: ScriptParams) => {
-  const repos = process.env.MONITORED_REPOS?.split(',').map(r => r.trim()) || [];
+  // Read monitored repositories from config file
+  let repos: string[] = [];
+  try {
+    const configFile = readFileSync('.github/config/monitored-repos.json', 'utf8');
+    const config: RepositoryConfig = JSON.parse(configFile);
+    repos = config.repositories || [];
+    console.log(`Loaded ${repos.length} repositories to monitor:`, repos);
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.error('Failed to load repository config:', errorMessage);
+    core.setFailed('Could not load monitored repositories configuration');
+    return;
+  }
 
   // Get last check time (stored in a file or use 5 minutes ago)
   const lastCheckTime = getLastCheckTime();
@@ -488,7 +497,7 @@ if (commits.data.length === 0) {
 ## Testing Requirements
 
 ### Manual Testing Steps
-1. **Repository Configuration**: Add test repository to `MONITORED_REPOS`
+1. **Repository Configuration**: Add test repository to `.github/config/monitored-repos.json`
 2. **Secret Validation**: Verify `ANTHROPIC_API_KEY` and `SLACK_WEBHOOK_URL` are set
 3. **Commit Generation**: Make test commit to monitored repository
 4. **Workflow Execution**: Trigger workflow manually via `workflow_dispatch`
@@ -535,8 +544,7 @@ pip install claude-code-sdk
 ANTHROPIC_API_KEY=sk-ant-...
 SLACK_WEBHOOK_URL=https://hooks.slack.com/services/...
 
-# Workflow environment variables
-MONITORED_REPOS=repo1,repo2,repo3
+# Repository configuration is now in .github/config/monitored-repos.json
 ```
 
 ## Implementation Gotchas
