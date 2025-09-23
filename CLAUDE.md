@@ -74,8 +74,10 @@ The project includes multiple GitHub Actions workflows:
 1. **Sanity R2 Backup** (`.github/workflows/sanity-r2-backup.yml`) - Reusable workflow that can be called from other repositories. It validates inputs, manages secrets, and reports job outputs.
 
 2. **GitHub Slack Notifications** (`.github/workflows/github-slack-notifications.yml`) - Monitors repository pushes and posts AI-generated summaries to Slack. Includes:
-   - **Push Processing Script** (`.github/scripts/process-pushes.ts`) - TypeScript script that integrates GitHub API, Claude SDK, and Slack webhooks
+   - **Push Processing Script** (`.github/scripts/process-pushes.js`) - JavaScript script that integrates GitHub API, Claude SDK, and Slack webhooks
    - **Repository Configuration** (`.github/config/monitored-repos.json`) - JSON configuration for repositories to monitor
+
+   **Important**: Scripts used by the `github-script` action must be JavaScript (`.js`), not TypeScript (`.ts`). The `github-script` action cannot import TypeScript files directly due to module resolution limitations.
 
 ## Environment Variables
 

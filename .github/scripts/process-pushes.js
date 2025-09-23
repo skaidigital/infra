@@ -1,121 +1,12 @@
 import { execSync } from 'child_process';
 import { writeFileSync, readFileSync, existsSync, unlinkSync } from 'fs';
 
-// GitHub Actions environment includes fetch globally
-declare global {
-  function fetch(url: string, options?: RequestInit): Promise<Response>;
-}
-
-interface GitHubContext {
-  repo: {
-    owner: string;
-    repo: string;
-  };
-}
-
-interface GitHubAPI {
-  rest: {
-    repos: {
-      listCommits: (params: {
-        owner: string;
-        repo: string;
-        sha: string;
-        since: string;
-        per_page: number;
-      }) => Promise<{ data: GitHubCommit[] }>;
-      getCommit: (params: {
-        owner: string;
-        repo: string;
-        ref: string;
-      }) => Promise<{ data: GitHubCommitDetails }>;
-    };
-  };
-}
-
-interface GitHubCommit {
-  sha: string;
-  commit: {
-    author: {
-      name: string;
-      date: string;
-    };
-    message: string;
-  };
-}
-
-interface GitHubCommitDetails {
-  html_url: string;
-  commit: {
-    author: {
-      name: string;
-      date: string;
-    };
-    message: string;
-  };
-  files: GitHubFile[];
-}
-
-interface GitHubFile {
-  filename: string;
-  status: string;
-  additions: number;
-  deletions: number;
-}
-
-interface CommitData {
-  repository: string;
-  author: string;
-  message: string;
-  files: {
-    filename: string;
-    status: string;
-    additions: number;
-    deletions: number;
-  }[];
-  url: string;
-  timestamp: string;
-}
-
-interface SlackMessage {
-  text: string;
-  blocks: SlackBlock[];
-}
-
-interface SlackBlock {
-  type: string;
-  text?: {
-    type: string;
-    text: string;
-    emoji?: boolean;
-  };
-  fields?: {
-    type: string;
-    text: string;
-  }[];
-  elements?: {
-    type: string;
-    text: string;
-  }[];
-}
-
-interface ScriptParams {
-  github: GitHubAPI;
-  context: GitHubContext;
-  core: {
-    setFailed: (message: string) => void;
-  };
-}
-
-interface RepositoryConfig {
-  repositories: string[];
-}
-
-export default async ({ github, context, core }: ScriptParams): Promise<void> => {
+export default async ({ github, context, core }) => {
   // Read monitored repositories from config file
-  let repos: string[] = [];
+  let repos = [];
   try {
     const configFile = readFileSync('.github/config/monitored-repos.json', 'utf8');
-    const config: RepositoryConfig = JSON.parse(configFile);
+    const config = JSON.parse(configFile);
     repos = config.repositories || [];
     console.log(`Loaded ${repos.length} repositories to monitor:`, repos);
   } catch (error) {
@@ -156,7 +47,7 @@ export default async ({ github, context, core }: ScriptParams): Promise<void> =>
       });
 
       // Prepare data for AI summarization
-      const commitData: CommitData = {
+      const commitData = {
         repository: repoName,
         author: commitDetails.data.commit.author.name,
         message: commitDetails.data.commit.message,
@@ -187,7 +78,7 @@ export default async ({ github, context, core }: ScriptParams): Promise<void> =>
   updateLastCheckTime(currentTime);
 };
 
-function getLastCheckTime(): string {
+function getLastCheckTime() {
   try {
     if (existsSync('.last-check')) {
       return readFileSync('.last-check', 'utf8').trim();
@@ -201,7 +92,7 @@ function getLastCheckTime(): string {
   return fiveMinutesAgo.toISOString();
 }
 
-function updateLastCheckTime(time: string): void {
+function updateLastCheckTime(time) {
   try {
     writeFileSync('.last-check', time);
   } catch (error) {
@@ -210,7 +101,7 @@ function updateLastCheckTime(time: string): void {
   }
 }
 
-async function generateAISummary(commitData: CommitData): Promise<string> {
+async function generateAISummary(commitData) {
   const prompt = `Summarize these git changes for a Slack notification:
 
 Repository: ${commitData.repository}
@@ -272,8 +163,8 @@ if __name__ == "__main__":
   }
 }
 
-async function sendSlackNotification(commitData: CommitData, summary: string): Promise<void> {
-  const message: SlackMessage = {
+async function sendSlackNotification(commitData, summary) {
+  const message = {
     text: `🚀 **${commitData.repository}** - Main Branch Update`,
     blocks: [
       {
@@ -324,7 +215,7 @@ async function sendSlackNotification(commitData: CommitData, summary: string): P
   };
 
   try {
-    const response = await fetch(process.env.SLACK_WEBHOOK_URL!, {
+    const response = await fetch(process.env.SLACK_WEBHOOK_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
