@@ -11,7 +11,7 @@ on:
 jobs:
   notify-pushes:
     name: Check for new pushes and notify Slack
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-8vcpu-ubuntu-2204
     timeout-minutes: 10
 
     steps:
