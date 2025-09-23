@@ -106,8 +106,24 @@ interface ScriptParams {
   };
 }
 
+interface RepositoryConfig {
+  repositories: string[];
+}
+
 export default async ({ github, context, core }: ScriptParams): Promise<void> => {
-  const repos = process.env.MONITORED_REPOS?.split(',').map(r => r.trim()) || [];
+  // Read monitored repositories from config file
+  let repos: string[] = [];
+  try {
+    const configFile = readFileSync('.github/config/monitored-repos.json', 'utf8');
+    const config: RepositoryConfig = JSON.parse(configFile);
+    repos = config.repositories || [];
+    console.log(`Loaded ${repos.length} repositories to monitor:`, repos);
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.error('Failed to load repository config:', errorMessage);
+    core.setFailed('Could not load monitored repositories configuration');
+    return;
+  }
 
   // Get last check time (stored in a file or use 5 minutes ago)
   const lastCheckTime = getLastCheckTime();
