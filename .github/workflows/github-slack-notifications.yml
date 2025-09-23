@@ -35,8 +35,8 @@ jobs:
             echo "::error::ANTHROPIC_API_KEY secret is not set"
             exit 1
           fi
-          if [ -z "${{ secrets.SLACK_SKAI_NOTIFICATION_CHANNEL_WEBHOOK_URL }}" ]; then
-            echo "::error::SLACK_SKAI_NOTIFICATION_CHANNEL_WEBHOOK_URL secret is not set"
+          if [ -z "${{ secrets.SLACK_WEBHOOK_URL }}" ]; then
+            echo "::error::SLACK_WEBHOOK_URL secret is not set"
             exit 1
           fi
 
@@ -44,7 +44,7 @@ jobs:
         uses: actions/github-script@v7
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_SKAI_NOTIFICATION_CHANNEL_WEBHOOK_URL }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
           MONITORED_REPOS: ${{ env.MONITORED_REPOS }}
         with:
           script: |

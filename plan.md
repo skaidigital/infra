@@ -144,8 +144,8 @@ jobs:
             echo "::error::ANTHROPIC_API_KEY secret is not set"
             exit 1
           fi
-          if [ -z "${{ secrets.SLACK_SKAI_NOTIFICATION_CHANNEL_WEBHOOK_URL }}" ]; then
-            echo "::error::SLACK_SKAI_NOTIFICATION_CHANNEL_WEBHOOK_URL secret is not set"
+          if [ -z "${{ secrets.SLACK_WEBHOOK_URL }}" ]; then
+            echo "::error::SLACK_WEBHOOK_URL secret is not set"
             exit 1
           fi
 
@@ -153,7 +153,7 @@ jobs:
         uses: actions/github-script@v7
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_SKAI_NOTIFICATION_CHANNEL_WEBHOOK_URL }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
           MONITORED_REPOS: ${{ env.MONITORED_REPOS }}
         with:
           script: |
@@ -489,7 +489,7 @@ if (commits.data.length === 0) {
 
 ### Manual Testing Steps
 1. **Repository Configuration**: Add test repository to `MONITORED_REPOS`
-2. **Secret Validation**: Verify `ANTHROPIC_API_KEY` and `SLACK_SKAI_NOTIFICATION_CHANNEL_WEBHOOK_URL` are set
+2. **Secret Validation**: Verify `ANTHROPIC_API_KEY` and `SLACK_WEBHOOK_URL` are set
 3. **Commit Generation**: Make test commit to monitored repository
 4. **Workflow Execution**: Trigger workflow manually via `workflow_dispatch`
 5. **Output Verification**: Check Slack channel for formatted notification
@@ -533,7 +533,7 @@ pip install claude-code-sdk
 ```env
 # Required organization secrets
 ANTHROPIC_API_KEY=sk-ant-...
-SLACK_SKAI_NOTIFICATION_CHANNEL_WEBHOOK_URL=https://hooks.slack.com/services/...
+SLACK_WEBHOOK_URL=https://hooks.slack.com/services/...
 
 # Workflow environment variables
 MONITORED_REPOS=repo1,repo2,repo3

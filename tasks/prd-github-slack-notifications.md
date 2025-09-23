@@ -50,7 +50,7 @@ This feature implements an automated system that monitors pushes to main branche
 
 7. **Centralized Deployment:** The system must run from a single centralized workflow in this repository that monitors other repositories.
 
-8. **Secret Management:** The system must use organization-level secrets for ANTHROPIC_API_KEY and SLACK_SKAI_NOTIFICATION_CHANNEL_WEBHOOK_URL.
+8. **Secret Management:** The system must use organization-level secrets for ANTHROPIC_API_KEY and SLACK_WEBHOOK_URL.
 
 9. **Error Handling:** The system must fail silently if Slack webhook fails, without stopping execution or generating alerts.
 
@@ -86,7 +86,7 @@ This feature implements an automated system that monitors pushes to main branche
 
 ### Required Secrets
 - `ANTHROPIC_API_KEY`: API key for Claude SDK access
-- `SLACK_SKAI_NOTIFICATION_CHANNEL_WEBHOOK_URL`: Target Slack channel webhook URL
+- `SLACK_WEBHOOK_URL`: Target Slack channel webhook URL
 
 ### Workflow Structure
 1. **Trigger:** On push to main branch of monitored repositories
