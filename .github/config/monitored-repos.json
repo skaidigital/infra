@@ -1,6 +1,7 @@
 {
   "repositories": [
     "infra",
-    "skai-admin"
+    "skai-admin",
+    "claude"
   ]
 }
