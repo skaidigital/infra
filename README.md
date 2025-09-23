@@ -46,8 +46,8 @@ Monitor repository pushes and get AI-powered Slack notifications.
 
 #### Quick Setup
 
-1. **Configure Organization Secrets**
-   - Go to GitHub Organization → Settings → Secrets → Actions
+1. **Configure Repository Secrets** (since this is a public repository)
+   - Go to this repository → Settings → Secrets and variables → Actions → Secrets
    - Add these secrets:
      - `ANTHROPIC_API_KEY`: Your Claude API key (get from [console.anthropic.com](https://console.anthropic.com))
      - `SLACK_WEBHOOK_URL`: Your Slack webhook URL
@@ -93,10 +93,10 @@ Automate backups of Sanity datasets to Cloudflare R2 storage.
 
 Add these **organization secrets** that will be shared across all repos:
 
-| Secret Name | Where to Find It | Description | Used By |
-|------------|------------------|-------------|---------|
-| `ANTHROPIC_API_KEY` | [console.anthropic.com](https://console.anthropic.com) → API → Create Key | Claude API key for AI summaries | GitHub Notifications |
-| `SLACK_WEBHOOK_URL` | Slack → Apps → Incoming Webhooks | Webhook URL for notifications | GitHub Notifications |
+| Secret Name | Where to Add | Where to Find It | Description | Used By |
+|------------|--------------|------------------|-------------|---------|
+| `ANTHROPIC_API_KEY` | This Repository (Secrets) | [console.anthropic.com](https://console.anthropic.com) → API → Create Key | Claude API key for AI summaries | GitHub Notifications |
+| `SLACK_WEBHOOK_URL` | This Repository (Secrets) | Slack → Apps → Incoming Webhooks | Webhook URL for notifications | GitHub Notifications |
 | `R2_ACCOUNT_ID` | Cloudflare Dashboard → R2 → Overview | Your Cloudflare account ID | Sanity Backups |
 | `R2_ACCESS_KEY_ID` | Cloudflare → R2 → Manage R2 API Tokens → Create API Token | R2 access key | Sanity Backups |
 | `R2_SECRET_ACCESS_KEY` | Cloudflare → R2 → Manage R2 API Tokens → Create API Token | R2 secret key | Sanity Backups |
@@ -189,8 +189,8 @@ These are **not secrets** - put them directly in your workflow file:
 
 | Secret | Where to Add | Where to Find | Scope | Used By |
 |--------|--------------|---------------|--------|---------|
-| `ANTHROPIC_API_KEY` | GitHub Organization | console.anthropic.com | All repos | GitHub Notifications |
-| `SLACK_WEBHOOK_URL` | GitHub Organization | Slack App → Incoming Webhooks | All repos | GitHub Notifications |
+| `ANTHROPIC_API_KEY` | This Repository (Secrets) | console.anthropic.com | This repo only | GitHub Notifications |
+| `SLACK_WEBHOOK_URL` | This Repository (Secrets) | Slack App → Incoming Webhooks | This repo only | GitHub Notifications |
 | `R2_ACCOUNT_ID` | GitHub Organization | Cloudflare Dashboard | All backup repos | Sanity Backups |
 | `R2_ACCESS_KEY_ID` | GitHub Organization | Cloudflare R2 API Tokens | All backup repos | Sanity Backups |
 | `R2_SECRET_ACCESS_KEY` | GitHub Organization | Cloudflare R2 API Tokens | All backup repos | Sanity Backups |
