@@ -17,7 +17,8 @@ jobs:
     steps:
       - name: Checkout infrastructure repository
         uses: actions/checkout@v4
-
+        with:
+          fetch-depth: 0  # Need full history for accurate analysis
 
       - name: Validate secrets
         run: |
@@ -30,7 +31,7 @@ jobs:
             exit 1
           fi
 
-      - name: Process repository pushes
+      - name: Process repository pushes and generate summaries
         uses: actions/github-script@v7
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}

@@ -1,6 +1,12 @@
 import { readFileSync, existsSync, writeFileSync } from 'fs';
+import Anthropic from '@anthropic-ai/sdk';
 
 export default async ({ github, context, core }) => {
+  // Initialize Claude SDK
+  const anthropic = new Anthropic({
+    apiKey: process.env.ANTHROPIC_API_KEY,
+  });
+
   // Read monitored repositories from config file
   let repos = [];
   try {
@@ -37,34 +43,46 @@ export default async ({ github, context, core }) => {
         continue;
       }
 
-      // Get detailed commit information
-      const latestCommit = commits.data[0];
-      const commitDetails = await github.rest.repos.getCommit({
-        owner: context.repo.owner,
-        repo: repoName,
-        ref: latestCommit.sha
-      });
+      // Process all new commits (or just the latest for batch summary)
+      const commitsToProcess = commits.data;
+      console.log(`Found ${commitsToProcess.length} new commits in ${repoName}`);
+
+      // Get detailed information for all commits
+      const commitDetails = await Promise.all(
+        commitsToProcess.slice(0, 5).map(async (commit) => {
+          const details = await github.rest.repos.getCommit({
+            owner: context.repo.owner,
+            repo: repoName,
+            ref: commit.sha
+          });
+          return details.data;
+        })
+      );
 
       // Prepare data for AI summarization
-      const commitData = {
+      const changesData = {
         repository: repoName,
-        author: commitDetails.data.commit.author.name,
-        message: commitDetails.data.commit.message,
-        files: commitDetails.data.files.map(f => ({
-          filename: f.filename,
-          status: f.status,
-          additions: f.additions,
-          deletions: f.deletions
-        })),
-        url: commitDetails.data.html_url,
-        timestamp: commitDetails.data.commit.author.date
+        commits: commitDetails.map(commit => ({
+          sha: commit.sha.substring(0, 7),
+          author: commit.commit.author.name,
+          message: commit.commit.message,
+          timestamp: commit.commit.author.date,
+          files: commit.files.map(f => ({
+            filename: f.filename,
+            status: f.status,
+            additions: f.additions,
+            deletions: f.deletions,
+            patch: f.patch ? f.patch.substring(0, 500) : undefined // Include snippet of changes
+          })),
+          url: commit.html_url
+        }))
       };
 
       // Generate AI summary using Claude SDK
-      const summary = await generateAISummary(commitData);
+      const summary = await generateAISummary(anthropic, changesData);
 
       // Send Slack notification
-      await sendSlackNotification(commitData, summary);
+      await sendSlackNotification(changesData, summary);
 
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -100,48 +118,76 @@ function updateLastCheckTime(time) {
   }
 }
 
-async function generateAISummary(commitData) {
-  // For now, just return the commit title and message instead of AI summary
-  return `**${commitData.message}**\n\nBy ${commitData.author}`;
+async function generateAISummary(anthropic, changesData) {
+  try {
+    // Prepare context for Claude
+    const commitInfo = changesData.commits.map(c => {
+      const fileList = c.files.map(f => `  - ${f.filename} (${f.status}: +${f.additions}/-${f.deletions})`).join('\n');
+      return `
+Commit: ${c.sha} by ${c.author}
+Message: ${c.message}
+Files changed:
+${fileList}`;
+    }).join('\n\n');
+
+    const prompt = `You are a developer summarizing code changes for a team Slack notification. Analyze these commits and provide a CONCISE summary.
+
+Repository: ${changesData.repository}
+${commitInfo}
+
+Create a bullet-point summary that:
+1. Groups related changes together
+2. Explains WHAT changed and WHERE (file/component names)
+3. Explains WHY based on commit messages
+4. Highlights any breaking changes or important updates
+5. Uses technical but clear language
+
+Format your response as markdown bullet points. Be concise - aim for 3-5 main points. Focus on the most important changes.`;
+
+    const response = await anthropic.messages.create({
+      model: 'claude-3-haiku-20240307',
+      max_tokens: 500,
+      messages: [
+        {
+          role: 'user',
+          content: prompt
+        }
+      ]
+    });
+
+    // Extract the text content from the response
+    const summary = response.content[0].type === 'text' ? response.content[0].text : 'Unable to generate summary';
+    return summary;
+  } catch (error) {
+    console.error('Failed to generate AI summary:', error);
+    // Fallback to basic summary
+    const latestCommit = changesData.commits[0];
+    return `• ${latestCommit.message} (${latestCommit.files.length} files changed)`;
+  }
 }
 
-async function sendSlackNotification(commitData, summary) {
+async function sendSlackNotification(changesData, summary) {
+  // Get the latest commit info for header
+  const latestCommit = changesData.commits[0];
+  const totalFiles = changesData.commits.reduce((sum, c) => sum + c.files.length, 0);
+  const commitCount = changesData.commits.length;
+
   const message = {
-    text: `🚀 **${commitData.repository}** - Main Branch Update`,
+    text: `${changesData.repository} - ${latestCommit.author}`,
     blocks: [
       {
         type: 'header',
         text: {
           type: 'plain_text',
-          text: `🚀 ${commitData.repository} - Main Branch Update`,
+          text: `${changesData.repository} - ${latestCommit.author}`,
           emoji: true
         }
       },
       {
         type: 'section',
-        fields: [
-          {
-            type: 'mrkdwn',
-            text: `*Author:*\n${commitData.author}`
-          },
-          {
-            type: 'mrkdwn',
-            text: `*Files Changed:*\n${commitData.files.slice(0, 5).map(f => f.filename).join(', ')}`
-          }
-        ]
-      },
-      {
-        type: 'section',
         text: {
           type: 'mrkdwn',
-          text: `*Summary:*\n${summary}`
-        }
-      },
-      {
-        type: 'section',
-        text: {
-          type: 'mrkdwn',
-          text: `🔗 <${commitData.url}|View Changes>`
+          text: summary
         }
       },
       {
@@ -149,7 +195,7 @@ async function sendSlackNotification(commitData, summary) {
         elements: [
           {
             type: 'mrkdwn',
-            text: `Pushed at ${new Date(commitData.timestamp).toLocaleString()}`
+            text: `${commitCount} commit${commitCount > 1 ? 's' : ''} | ${totalFiles} file${totalFiles > 1 ? 's' : ''} changed | <${latestCommit.url}|View changes>`
           }
         ]
       }
@@ -170,10 +216,10 @@ async function sendSlackNotification(commitData, summary) {
       throw new Error(`Slack API error: ${response.status} - ${errorText}`);
     }
 
-    console.log(`Slack notification sent for ${commitData.repository}`);
+    console.log(`Slack notification sent for ${changesData.repository}`);
   } catch (error) {
     // Silent failure for Slack notifications
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    console.error(`Failed to send Slack notification for ${commitData.repository}:`, errorMessage);
+    console.error(`Failed to send Slack notification for ${changesData.repository}:`, errorMessage);
   }
 }

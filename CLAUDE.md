@@ -8,7 +8,7 @@ This is an infrastructure automation hub for SKAI Digital built with Bun runtime
 
 1. **Sanity to Cloudflare R2 Backup**: Automated backup of Sanity datasets with compression, integrity checking, retention management, and notifications.
 
-2. **GitHub Push Notifications to Slack**: AI-powered monitoring system that posts intelligent summaries of main branch pushes to Slack channels using Claude SDK.
+2. **GitHub Push Notifications to Slack**: AI-powered monitoring system that posts intelligent summaries of main branch pushes to Slack channels using Claude SDK. Features concise, bullet-point summaries showing what changed, where, and why.
 
 ## Development Commands
 
@@ -76,6 +76,8 @@ The project includes multiple GitHub Actions workflows:
 2. **GitHub Slack Notifications** (`.github/workflows/github-slack-notifications.yml`) - Monitors repository pushes and posts AI-generated summaries to Slack. Includes:
    - **Push Processing Script** (`.github/scripts/process-pushes.js`) - JavaScript script that integrates GitHub API, Claude SDK, and Slack webhooks
    - **Repository Configuration** (`.github/config/monitored-repos.json`) - JSON configuration for repositories to monitor
+   - **AI Summary Generation**: Uses Claude SDK (Haiku model) to create concise bullet-point summaries
+   - **Simplified Format**: Header shows `{repo} - {author}`, content shows what/where/why
 
    **Important**: Scripts used by the `github-script` action must be JavaScript (`.js`), not TypeScript (`.ts`). The `github-script` action cannot import TypeScript files directly due to module resolution limitations.
 
