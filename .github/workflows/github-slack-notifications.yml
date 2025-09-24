@@ -20,6 +20,14 @@ jobs:
         with:
           fetch-depth: 0  # Need full history for accurate analysis
 
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+
       - name: Validate secrets
         run: |
           if [ -z "${{ secrets.ANTHROPIC_API_KEY }}" ]; then
