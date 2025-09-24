@@ -142,7 +142,18 @@ Create a bullet-point summary that:
 4. Highlights any breaking changes or important updates
 5. Uses technical but clear language
 
-Format your response as markdown bullet points. Be concise - aim for 3-5 main points. Focus on the most important changes.`;
+Format rules:
+- Start each point with a bullet (•)
+- Use backticks for code elements, file names, and technical terms
+- Bold important changes using *asterisks*
+- Keep each bullet point to 1-2 lines maximum
+- Aim for 3-5 main points total
+- No markdown headers or excessive formatting
+
+Example format:
+• *Fixed CI dependency issue* - Added dependency installation step to resolve \`ERR_MODULE_NOT_FOUND\` errors
+• *Implemented AI-powered GitHub summaries* - Integrated Claude SDK for intelligent push notifications
+• Added \`@anthropic-ai/sdk\` package to enable contextual code analysis`;
 
     const response = await anthropic.messages.create({
       model: 'claude-3-haiku-20240307',
@@ -172,14 +183,21 @@ async function sendSlackNotification(changesData, summary) {
   const totalFiles = changesData.commits.reduce((sum, c) => sum + c.files.length, 0);
   const commitCount = changesData.commits.length;
 
+  // Format the summary for Slack - ensure proper formatting
+  const formattedSummary = summary
+    .replace(/\*\*/g, '*') // Convert markdown bold to Slack bold
+    .replace(/`([^`]+)`/g, '`$1`') // Ensure inline code formatting works
+    .replace(/^- /gm, '• ') // Convert dashes to bullets
+    .replace(/^\* /gm, '• '); // Convert asterisks to bullets
+
   const message = {
-    text: `${changesData.repository} - ${latestCommit.author}`,
+    text: `Push to main - ${changesData.repository} - ${latestCommit.author}`,
     blocks: [
       {
         type: 'header',
         text: {
           type: 'plain_text',
-          text: `${changesData.repository} - ${latestCommit.author}`,
+          text: `Push to main - ${changesData.repository} - ${latestCommit.author}`,
           emoji: true
         }
       },
@@ -187,7 +205,7 @@ async function sendSlackNotification(changesData, summary) {
         type: 'section',
         text: {
           type: 'mrkdwn',
-          text: summary
+          text: formattedSummary
         }
       },
       {
