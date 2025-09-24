@@ -10,6 +10,14 @@ const mockS3Client = mock((...args: any[]) => ({
   send: mockSend,
 }));
 
+// Mock Upload class for multipart upload testing
+const mockUploadDone = mock(() => Promise.resolve());
+const mockUploadOn = mock((event: string, handler: any) => {});
+const mockUpload = mock((config: any) => ({
+  done: mockUploadDone,
+  on: mockUploadOn,
+}));
+
 mock.module('@aws-sdk/client-s3', () => ({
   S3Client: mockS3Client,
   PutObjectCommand: mock((params: any) => ({ ...params, _type: 'PutObjectCommand' })),
@@ -17,6 +25,10 @@ mock.module('@aws-sdk/client-s3', () => ({
   ListObjectsV2Command: mock((params: any) => ({ ...params, _type: 'ListObjectsV2Command' })),
   DeleteObjectsCommand: mock((params: any) => ({ ...params, _type: 'DeleteObjectsCommand' })),
   GetObjectCommand: mock((params: any) => ({ ...params, _type: 'GetObjectCommand' })),
+}));
+
+mock.module('@aws-sdk/lib-storage', () => ({
+  Upload: mockUpload,
 }));
 
 describe('R2 Upload Operations', () => {
@@ -46,6 +58,9 @@ describe('R2 Upload Operations', () => {
   afterEach(async () => {
     await fs.rm(tempDir, { recursive: true, force: true });
     process.env = originalEnv;
+    mockUploadDone.mockClear();
+    mockUploadOn.mockClear();
+    mockUpload.mockClear();
   });
 
   test('uploadToR2 uploads file successfully', async () => {
@@ -91,6 +106,156 @@ describe('R2 Upload Operations', () => {
 
     await expect(uploadToR2(testFile, 'test/path/file.tar.gz'))
       .rejects.toThrow('R2 credentials not configured');
+  });
+
+  test('uploadToR2 uses multipart upload for large files', async () => {
+    // Create a large file (over 100MB threshold)
+    const largeFile = join(tempDir, 'large.tar.gz');
+    const size = 150 * 1024 * 1024; // 150MB
+    const buffer = Buffer.alloc(size, 'a');
+    await fs.writeFile(largeFile, buffer);
+
+    // Mock successful upload and verification
+    mockSend.mockImplementation((command: any) => {
+      if (command._type === 'HeadObjectCommand') {
+        return Promise.resolve({
+          ContentLength: size,
+          ETag: '"large-file-etag"',
+        });
+      }
+      return Promise.resolve({});
+    });
+
+    await uploadToR2(largeFile, 'test/large-file.tar.gz');
+
+    // Verify multipart upload was used
+    expect(mockUpload).toHaveBeenCalledTimes(1);
+    const uploadCall = mockUpload.mock.calls[0][0];
+    expect(uploadCall.params.Bucket).toBe('test-bucket');
+    expect(uploadCall.params.Key).toBe('test/large-file.tar.gz');
+    expect(uploadCall.queueSize).toBe(4);
+    expect(uploadCall.partSize).toBe(10 * 1024 * 1024); // 10MB parts
+    expect(uploadCall.leavePartsOnError).toBe(false);
+
+    // Verify progress tracking was set up
+    expect(mockUploadOn).toHaveBeenCalledWith('httpUploadProgress', expect.any(Function));
+  });
+
+  test('uploadToR2 uses simple upload for small files', async () => {
+    // Create a small file (under 100MB threshold)
+    const smallFile = join(tempDir, 'small.tar.gz');
+    const size = 50 * 1024 * 1024; // 50MB
+    const buffer = Buffer.alloc(size, 'b');
+    await fs.writeFile(smallFile, buffer);
+
+    mockSend.mockImplementation((command: any) => {
+      if (command._type === 'HeadObjectCommand') {
+        return Promise.resolve({
+          ContentLength: size,
+          ETag: '"small-file-etag"',
+        });
+      }
+      return Promise.resolve({});
+    });
+
+    await uploadToR2(smallFile, 'test/small-file.tar.gz');
+
+    // Verify multipart upload was NOT used
+    expect(mockUpload).toHaveBeenCalledTimes(0);
+
+    // Verify simple upload was used (PutObjectCommand + HeadObjectCommand)
+    expect(mockSend).toHaveBeenCalledTimes(2);
+  });
+
+  test('uploadToR2 includes enhanced error details on failure', async () => {
+    // Create a file
+    const errorFile = join(tempDir, 'error.tar.gz');
+    const size = 200 * 1024 * 1024; // 200MB
+    const buffer = Buffer.alloc(1024); // Small buffer for test
+    await fs.writeFile(errorFile, buffer);
+
+    // Mock upload failure
+    mockUploadDone.mockImplementation(() =>
+      Promise.reject(new Error('Network timeout'))
+    );
+
+    // Override file stats to return our desired size
+    const originalStat = fs.stat;
+    // @ts-ignore - mocking fs.stat temporarily
+    fs.stat = async (path: string) => {
+      if (path === errorFile) {
+        return { size };
+      }
+      return originalStat(path);
+    };
+
+    try {
+      await uploadToR2(errorFile, 'test/error-file.tar.gz');
+      expect(true).toBe(false); // Should not reach here
+    } catch (error: any) {
+      // Verify enhanced error message includes context
+      expect(error.message).toContain('R2 upload failed for error.tar.gz');
+      expect(error.message).toContain('200.00 MB');
+      expect(error.message).toContain('Network timeout');
+      expect(error.message).toContain('Bucket: test-bucket');
+      expect(error.message).toContain('Key: test/error-file.tar.gz');
+    } finally {
+      // @ts-ignore - restore original fs.stat
+      fs.stat = originalStat;
+    }
+  });
+
+  test('multipart upload progress callback works correctly', async () => {
+    const largeFile = join(tempDir, 'progress-test.tar.gz');
+    const size = 150 * 1024 * 1024; // 150MB
+    const buffer = Buffer.alloc(1024); // Small buffer for test
+    await fs.writeFile(largeFile, buffer);
+
+    // Override file stats
+    const originalStat = fs.stat;
+    // @ts-ignore
+    fs.stat = async (path: string) => {
+      if (path === largeFile) {
+        return { size };
+      }
+      return originalStat(path);
+    };
+
+    // Reset upload mock to succeed
+    mockUploadDone.mockImplementation(() => Promise.resolve());
+
+    let progressCallback: any;
+    mockUploadOn.mockImplementation((event: string, handler: any) => {
+      if (event === 'httpUploadProgress') {
+        progressCallback = handler;
+      }
+    });
+
+    mockSend.mockImplementation((command: any) => {
+      if (command._type === 'HeadObjectCommand') {
+        return Promise.resolve({
+          ContentLength: size,
+          ETag: '"test-etag"',
+        });
+      }
+      return Promise.resolve({});
+    });
+
+    await uploadToR2(largeFile, 'test/progress.tar.gz');
+
+    // Simulate progress events
+    if (progressCallback) {
+      progressCallback({ loaded: 50 * 1024 * 1024, total: size });
+      progressCallback({ loaded: 100 * 1024 * 1024, total: size });
+      progressCallback({ loaded: size, total: size });
+    }
+
+    // Verify Upload was configured correctly
+    expect(mockUpload).toHaveBeenCalledTimes(1);
+    expect(mockUploadOn).toHaveBeenCalledWith('httpUploadProgress', expect.any(Function));
+
+    // @ts-ignore
+    fs.stat = originalStat;
   });
 });
 

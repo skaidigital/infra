@@ -4,6 +4,7 @@ export interface NotificationOptions {
   status: 'success' | 'failure';
   projectId: string;
   dataset: string;
+  repository?: string;
   backupSize?: string;
   objectKey?: string;
   duration?: number;
@@ -78,13 +79,14 @@ export async function sendNotification(options: NotificationOptions): Promise<vo
 }
 
 function buildSlackMessage(options: NotificationOptions): SlackMessage {
-  const { status, projectId, dataset, backupSize, objectKey, duration, error } = options;
+  const { status, projectId, dataset, repository, backupSize, objectKey, duration, error } = options;
   const timestamp = new Date().toISOString();
 
   if (status === 'success') {
     return buildSuccessMessage({
       projectId,
       dataset,
+      repository,
       backupSize: backupSize || 'Unknown',
       objectKey: objectKey || 'Unknown',
       duration: duration || 0,
@@ -94,7 +96,9 @@ function buildSlackMessage(options: NotificationOptions): SlackMessage {
     return buildFailureMessage({
       projectId,
       dataset,
+      repository,
       error: error || 'Unknown error',
+      backupSize,
       timestamp,
     });
   }
@@ -103,15 +107,56 @@ function buildSlackMessage(options: NotificationOptions): SlackMessage {
 function buildSuccessMessage(params: {
   projectId: string;
   dataset: string;
+  repository?: string;
   backupSize: string;
   objectKey: string;
   duration: number;
   timestamp: string;
 }): SlackMessage {
-  const { projectId, dataset, backupSize, objectKey, duration, timestamp } = params;
+  const { projectId, dataset, repository, backupSize, objectKey, duration, timestamp } = params;
+
+  const fields = repository ? [
+    {
+      type: 'mrkdwn',
+      text: `*Repository:*\n${repository}`,
+    },
+    {
+      type: 'mrkdwn',
+      text: `*Project:*\n${projectId}`,
+    },
+    {
+      type: 'mrkdwn',
+      text: `*Dataset:*\n${dataset}`,
+    },
+    {
+      type: 'mrkdwn',
+      text: `*Size:*\n${backupSize} MB`,
+    },
+    {
+      type: 'mrkdwn',
+      text: `*Duration:*\n${formatDuration(duration)}`,
+    },
+  ] : [
+    {
+      type: 'mrkdwn',
+      text: `*Project:*\n${projectId}`,
+    },
+    {
+      type: 'mrkdwn',
+      text: `*Dataset:*\n${dataset}`,
+    },
+    {
+      type: 'mrkdwn',
+      text: `*Size:*\n${backupSize} MB`,
+    },
+    {
+      type: 'mrkdwn',
+      text: `*Duration:*\n${formatDuration(duration)}`,
+    },
+  ];
 
   return {
-    text: `✅ Backup completed successfully for ${projectId}/${dataset}`,
+    text: `✅ Backup completed successfully for ${projectId}/${dataset}${repository ? ` from ${repository}` : ''}`,
     blocks: [
       {
         type: 'header',
@@ -123,25 +168,12 @@ function buildSuccessMessage(params: {
       },
       {
         type: 'section',
-        fields: [
-          {
-            type: 'mrkdwn',
-            text: `*Project:*\n${projectId}`,
-          },
-          {
-            type: 'mrkdwn',
-            text: `*Dataset:*\n${dataset}`,
-          },
-          {
-            type: 'mrkdwn',
-            text: `*Size:*\n${backupSize} MB`,
-          },
-          {
-            type: 'mrkdwn',
-            text: `*Duration:*\n${formatDuration(duration)}`,
-          },
-        ],
+        fields: fields.slice(0, 4), // Slack limits to 10 fields per section, we'll use 4
       },
+      ...(fields.length > 4 ? [{
+        type: 'section',
+        fields: fields.slice(4),
+      }] : []),
       {
         type: 'section',
         text: {
@@ -182,13 +214,46 @@ function buildSuccessMessage(params: {
 function buildFailureMessage(params: {
   projectId: string;
   dataset: string;
+  repository?: string;
   error: string;
+  backupSize?: string;
   timestamp: string;
 }): SlackMessage {
-  const { projectId, dataset, error, timestamp } = params;
+  const { projectId, dataset, repository, error, backupSize, timestamp } = params;
+
+  const baseFields = repository ? [
+    {
+      type: 'mrkdwn',
+      text: `*Repository:*\n${repository}`,
+    },
+    {
+      type: 'mrkdwn',
+      text: `*Project:*\n${projectId}`,
+    },
+    {
+      type: 'mrkdwn',
+      text: `*Dataset:*\n${dataset}`,
+    },
+  ] : [
+    {
+      type: 'mrkdwn',
+      text: `*Project:*\n${projectId}`,
+    },
+    {
+      type: 'mrkdwn',
+      text: `*Dataset:*\n${dataset}`,
+    },
+  ];
+
+  if (backupSize) {
+    baseFields.push({
+      type: 'mrkdwn',
+      text: `*File Size:*\n${backupSize} MB`,
+    });
+  }
 
   return {
-    text: `❌ Backup failed for ${projectId}/${dataset}`,
+    text: `❌ Backup failed for ${projectId}/${dataset}${repository ? ` from ${repository}` : ''}`,
     blocks: [
       {
         type: 'header',
@@ -200,16 +265,7 @@ function buildFailureMessage(params: {
       },
       {
         type: 'section',
-        fields: [
-          {
-            type: 'mrkdwn',
-            text: `*Project:*\n${projectId}`,
-          },
-          {
-            type: 'mrkdwn',
-            text: `*Dataset:*\n${dataset}`,
-          },
-        ],
+        fields: baseFields,
       },
       {
         type: 'section',

@@ -6,6 +6,7 @@ import {
   HeadObjectCommand,
   GetObjectCommand,
 } from '@aws-sdk/client-s3';
+import { Upload } from '@aws-sdk/lib-storage';
 import { createReadStream } from 'fs';
 import { promises as fs } from 'fs';
 import { basename } from 'path';
@@ -58,28 +59,71 @@ export async function uploadToR2(filePath: string, objectKey: string): Promise<v
 
   try {
     const fileStats = await fs.stat(filePath);
-    const fileStream = createReadStream(filePath);
     const fileName = basename(filePath);
+    const fileSizeMB = fileStats.size / 1024 / 1024;
+    const endpoint = `https://${accountId}.eu.r2.cloudflarestorage.com`;
 
     logger.info(`Uploading ${fileName} to R2`, {
       bucket,
       key: objectKey,
-      size: `${(fileStats.size / 1024 / 1024).toFixed(2)} MB`,
+      size: `${fileSizeMB.toFixed(2)} MB`,
+      endpoint,
     });
 
-    const command = new PutObjectCommand({
-      Bucket: bucket,
-      Key: objectKey,
-      Body: fileStream,
-      ContentType: getContentType(fileName),
-      ContentLength: fileStats.size,
-      Metadata: {
-        'original-filename': fileName,
-        'upload-timestamp': new Date().toISOString(),
-      },
-    });
+    // Use multipart upload for files larger than 100MB
+    const MULTIPART_THRESHOLD = 100 * 1024 * 1024; // 100MB
 
-    await client.send(command);
+    if (fileStats.size > MULTIPART_THRESHOLD) {
+      logger.info(`Using multipart upload for large file (${fileSizeMB.toFixed(2)} MB)`);
+
+      const fileStream = createReadStream(filePath);
+      const parallelUploads = new Upload({
+        client,
+        params: {
+          Bucket: bucket,
+          Key: objectKey,
+          Body: fileStream,
+          ContentType: getContentType(fileName),
+          Metadata: {
+            'original-filename': fileName,
+            'upload-timestamp': new Date().toISOString(),
+          },
+        },
+        // Configuration for multipart upload
+        queueSize: 4, // Number of concurrent uploads
+        partSize: 10 * 1024 * 1024, // 10MB per part (minimum is 5MB for S3/R2)
+        leavePartsOnError: false, // Clean up parts on error
+      });
+
+      // Track upload progress
+      parallelUploads.on('httpUploadProgress', (progress) => {
+        if (progress.loaded && progress.total) {
+          const percentComplete = ((progress.loaded / progress.total) * 100).toFixed(2);
+          logger.info(`Upload progress: ${percentComplete}%`, {
+            loaded: `${(progress.loaded / 1024 / 1024).toFixed(2)} MB`,
+            total: `${(progress.total / 1024 / 1024).toFixed(2)} MB`,
+          });
+        }
+      });
+
+      await parallelUploads.done();
+    } else {
+      // Use simple upload for smaller files
+      const fileStream = createReadStream(filePath);
+      const command = new PutObjectCommand({
+        Bucket: bucket,
+        Key: objectKey,
+        Body: fileStream,
+        ContentType: getContentType(fileName),
+        ContentLength: fileStats.size,
+        Metadata: {
+          'original-filename': fileName,
+          'upload-timestamp': new Date().toISOString(),
+        },
+      });
+
+      await client.send(command);
+    }
 
     // Verify upload
     const headCommand = new HeadObjectCommand({
@@ -91,7 +135,7 @@ export async function uploadToR2(filePath: string, objectKey: string): Promise<v
 
     if (headResponse.ContentLength !== fileStats.size) {
       throw new Error(
-        `Upload verification failed: size mismatch (expected ${fileStats.size}, got ${headResponse.ContentLength})`
+        `Upload verification failed: size mismatch (expected ${fileStats.size} bytes, got ${headResponse.ContentLength} bytes)`
       );
     }
 
@@ -101,8 +145,20 @@ export async function uploadToR2(filePath: string, objectKey: string): Promise<v
       etag: headResponse.ETag,
     });
   } catch (error) {
-    logger.error('Failed to upload to R2', error as Error);
-    throw new Error(`R2 upload failed: ${(error as Error).message}`);
+    const errorMessage = (error as Error).message;
+    const fileName = basename(filePath);
+    const fileStats = await fs.stat(filePath).catch(() => null);
+    const fileSizeMB = fileStats ? (fileStats.size / 1024 / 1024).toFixed(2) : 'unknown';
+
+    logger.error(`Failed to upload ${fileName} to R2`, new Error(
+      `${errorMessage} | File: ${fileName}, Size: ${fileSizeMB} MB, Bucket: ${bucket}, Key: ${objectKey}`
+    ));
+
+    // Provide more context in the error message
+    throw new Error(
+      `R2 upload failed for ${fileName} (${fileSizeMB} MB): ${errorMessage}. ` +
+      `Bucket: ${bucket}, Key: ${objectKey}`
+    );
   }
 }
 

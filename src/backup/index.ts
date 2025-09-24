@@ -132,6 +132,7 @@ export async function runBackup(): Promise<BackupResult> {
       status: 'success',
       projectId: config.projectId,
       dataset: config.dataset,
+      repository: process.env.GITHUB_REPOSITORY,
       backupSize: fileSizeMB,
       objectKey,
       duration,
@@ -149,12 +150,23 @@ export async function runBackup(): Promise<BackupResult> {
   } catch (error) {
     logger.error('Backup failed', error as Error);
 
-    // Send failure notification
+    // Try to get file size if archive was created
+    let backupSize: string | undefined;
+    try {
+      const stats = await fs.stat(archivePath);
+      backupSize = (stats.size / (1024 * 1024)).toFixed(2);
+    } catch {
+      // Archive might not exist yet
+    }
+
+    // Send failure notification with enhanced error details
     await sendNotification({
       status: 'failure',
       projectId: config.projectId,
       dataset: config.dataset,
+      repository: process.env.GITHUB_REPOSITORY,
       error: (error as Error).message,
+      backupSize,
     });
 
     throw error;

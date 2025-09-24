@@ -166,6 +166,7 @@ jobs:
           INCLUDE_DRAFTS: ${{ inputs.includeDrafts }}
           INCLUDE_ASSETS: ${{ inputs.includeAssets }}
           ASSET_CONCURRENCY: ${{ inputs.assetConcurrency }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
           set -e
           echo "::notice::Starting backup for project: ${{ inputs.projectId }}, dataset: ${{ inputs.dataset }}"
@@ -212,60 +213,6 @@ jobs:
 
           echo "::notice::Backup completed successfully"
 
-      - name: Send failure notification
-        if: failure()
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-        run: |
-          # Send a direct failure notification as fallback
-          if [ -z "$SLACK_WEBHOOK_URL" ]; then
-            echo "::notice::SLACK_WEBHOOK_URL not configured, skipping failure notification"
-            exit 0
-          fi
-
-          curl -X POST $SLACK_WEBHOOK_URL \
-            -H 'Content-Type: application/json' \
-            -d '{
-              "text": "❌ Backup workflow failed for ${{ inputs.projectId }}/${{ inputs.dataset }}",
-              "blocks": [
-                {
-                  "type": "header",
-                  "text": {
-                    "type": "plain_text",
-                    "text": "❌ Backup Workflow Failed",
-                    "emoji": true
-                  }
-                },
-                {
-                  "type": "section",
-                  "fields": [
-                    {
-                      "type": "mrkdwn",
-                      "text": "*Project:*\n${{ inputs.projectId }}"
-                    },
-                    {
-                      "type": "mrkdwn",
-                      "text": "*Dataset:*\n${{ inputs.dataset }}"
-                    },
-                    {
-                      "type": "mrkdwn",
-                      "text": "*Run ID:*\n${{ github.run_id }}"
-                    },
-                    {
-                      "type": "mrkdwn",
-                      "text": "*Repository:*\n${{ github.repository }}"
-                    }
-                  ]
-                },
-                {
-                  "type": "section",
-                  "text": {
-                    "type": "mrkdwn",
-                    "text": "*Action Required:*\nCheck the <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|GitHub Actions logs> for details"
-                  }
-                }
-              ]
-            }' || echo "Failed to send Slack notification"
 
       - name: Upload logs on failure
         if: failure()
