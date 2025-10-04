@@ -1,4 +1,3 @@
-import { readFileSync, existsSync, writeFileSync } from 'fs';
 import Anthropic from '@anthropic-ai/sdk';
 
 export default async ({ github, context, core }) => {
@@ -7,23 +6,32 @@ export default async ({ github, context, core }) => {
     apiKey: process.env.ANTHROPIC_API_KEY,
   });
 
-  // Read monitored repositories from config file
+  // Fetch all repositories from the organization
   let repos = [];
   try {
-    const configFile = readFileSync('.github/config/monitored-repos.json', 'utf8');
-    const config = JSON.parse(configFile);
-    repos = config.repositories || [];
-    console.log(`Loaded ${repos.length} repositories to monitor:`, repos);
+    console.log(`Fetching all repositories from organization: ${context.repo.owner}`);
+    const { data: allRepos } = await github.rest.repos.listForOrg({
+      org: context.repo.owner,
+      type: 'all',
+      per_page: 100
+    });
+
+    // Filter out archived and disabled repositories
+    repos = allRepos
+      .filter(repo => !repo.archived && !repo.disabled)
+      .map(repo => repo.name);
+
+    console.log(`Found ${repos.length} active repositories to monitor:`, repos);
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    console.error('Failed to load repository config:', errorMessage);
-    core.setFailed('Could not load monitored repositories configuration');
+    console.error('Failed to fetch organization repositories:', errorMessage);
+    core.setFailed('Could not fetch organization repositories');
     return;
   }
 
-  // Get last check time (stored in a file or use 5 minutes ago)
-  const lastCheckTime = getLastCheckTime();
-  const currentTime = new Date().toISOString();
+  // Check commits from the last hour (matching cron schedule)
+  const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+  const lastCheckTime = oneHourAgo.toISOString();
 
   for (const repoName of repos) {
     try {
@@ -90,33 +98,7 @@ export default async ({ github, context, core }) => {
       // Continue with other repositories
     }
   }
-
-  // Update last check time
-  updateLastCheckTime(currentTime);
 };
-
-function getLastCheckTime() {
-  try {
-    if (existsSync('.last-check')) {
-      return readFileSync('.last-check', 'utf8').trim();
-    }
-  } catch (error) {
-    console.log('No previous check time found, using 5 minutes ago');
-  }
-
-  // Default to 5 minutes ago
-  const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
-  return fiveMinutesAgo.toISOString();
-}
-
-function updateLastCheckTime(time) {
-  try {
-    writeFileSync('.last-check', time);
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    console.error('Failed to update last check time:', errorMessage);
-  }
-}
 
 async function generateAISummary(anthropic, changesData) {
   try {
