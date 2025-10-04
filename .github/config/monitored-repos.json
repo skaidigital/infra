@@ -2,6 +2,7 @@
   "repositories": [
     "infra",
     "skai-admin",
-    "claude"
+    "claude",
+    "goldsource"
   ]
 }
